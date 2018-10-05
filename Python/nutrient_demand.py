@@ -15,8 +15,6 @@ def files(sub_dir):
 nutrient_dfs = np.array(files('/Research/Africa/Nutrient_Demand/'))
 print(nutrient_dfs)
 
-dfs = ['df_livinc', 'df_consump', 'df_hh_demographs', 'df_nutrient_props', 'df_land_crop', 'df_hh_asset']
-
 df_livinc = pd.read_csv(nutrient_dfs[0])
 df_consump = pd.read_csv(nutrient_dfs[1])
 df_hh_demographs = pd.read_csv(nutrient_dfs[2])
