@@ -56,7 +56,7 @@ while i < len(d):
     if i > len(d):
         break
 
-df = pd.concat(df_list, axis=0) # Ending with 15326
+df = pd.concat(df_list, axis=0) # Ending with 15326 observations
 
 # Write algorithm to convert food consumption values to macronutrient proportions
 # using USDA Food Composition Databases https://ndb.nal.usda.gov/ndb/
