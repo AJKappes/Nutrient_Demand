@@ -56,9 +56,77 @@ while i < len(d):
     if i > len(d):
         break
 
-df = pd.concat(df_list, axis=0) # Ending with 15326 observations
+df = pd.concat(df_list, axis=0).reset_index().drop(columns='index') # Ending with 15326 observations
 
 # Write algorithm to convert food consumption values to macronutrient proportions
 # using USDA Food Composition Databases https://ndb.nal.usda.gov/ndb/
 
+consump_l = ['TotalCowMilkConsumed', 'TotalGoatMilkConsumed', 'TotalEggsConsumed', 'TotalBeefConsumed',
+             'TotalGoatMeatConsumed', 'TotalOtherMeatConsumed', 'TotalFishConsumed', 'TotalMaizeConsumed',
+             'TotalCassavaConsumed', 'TotalSorghumConsumed', 'TotalBananaConsumed', 'TotalPulsesConsumed',
+             'TotalViungoConsumed', 'TotalGreensConsumed', 'TotalPotatoConsumed', 'TotalOilConsumed']
 
+consumption = df[consump_l]
+
+# Converting '300ML' string in oil consumption to L float value and 2kg in pulses to 2
+consumption.loc[consumption[consumption['TotalOilConsumed'] == '300ML'].index, 'TotalOilConsumed'] = 0.3
+consumption.loc[consumption[consumption['TotalPulsesConsumed'] == '2kg'].index, 'TotalPulsesConsumed'] = 2
+consumption = consumption.astype('float64')
+
+
+macronutrients = ['protein', 'fat', 'carb']
+
+goat_sheep_milk = pd.DataFrame(df_nutrient_props[df_nutrient_props['food_source'].isin(['milk_sheep', 'milk_goat'])]
+                               [macronutrients].mean()).T
+
+pulses = pd.DataFrame(df_nutrient_props[df_nutrient_props['food_source'].isin(['peas', 'navy', 'pinto',
+                                                                               'black', 'kidney', 'lentils'])]
+                      [macronutrients].mean()).T
+
+viungo = pd.DataFrame(df_nutrient_props[df_nutrient_props['food_source'].isin(['onions', 'tomatoes', 'carrots',
+                                                                               'green_peppers'])]
+                      [macronutrients].mean()).T
+
+greens = pd.DataFrame(df_nutrient_props[df_nutrient_props['food_source'].isin(['spinach', 'cabbage'])]
+                      [macronutrients].mean()).T
+
+nutrient_comps = pd.concat([df_nutrient_props[df_nutrient_props['food_source'] == 'milk_cow'][macronutrients],
+                            goat_sheep_milk,
+                            df_nutrient_props[df_nutrient_props['food_source'] == 'eggs'][macronutrients],
+                            df_nutrient_props[df_nutrient_props['food_source'] == 'beef'][macronutrients],
+                            df_nutrient_props[df_nutrient_props['food_source'] == 'goat'][macronutrients],
+                            df_nutrient_props[df_nutrient_props['food_source'] == 'other_poultry'][macronutrients],
+                            df_nutrient_props[df_nutrient_props['food_source'] == 'fish'][macronutrients],
+                            df_nutrient_props[df_nutrient_props['food_source'] == 'maize'][macronutrients],
+                            df_nutrient_props[df_nutrient_props['food_source'] == 'cassava'][macronutrients],
+                            df_nutrient_props[df_nutrient_props['food_source'] == 'sorghum'][macronutrients],
+                            df_nutrient_props[df_nutrient_props['food_source'] == 'banana'][macronutrients],
+                            pulses, viungo, greens,
+                            df_nutrient_props[df_nutrient_props['food_source'] == 'potato'][macronutrients],
+                            df_nutrient_props[df_nutrient_props['food_source'] == 'oil'][macronutrients]],
+                           axis=0).reset_index().drop(columns='index')
+
+# Macronutrient proportions are values per 100g of food item consumed
+# conversions: 1000g[water] per L
+#              1000g per Kg
+#
+# measured in L: cow and goat/sheep milk
+# measured in Kg: all meat and crop items
+# eggs measured in # consumed: medium egg = 44g => scale 100g egg nutrient values by 0.44
+
+conversion = np.array([10, 10, 0.44, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10])
+consumption = np.array(consumption)
+nutrient_comps = np.array(nutrient_comps)
+
+macros = pd.DataFrame({'protein_cons': np.zeros(len(consumption)),
+                       'fat_cons': np.zeros(len(consumption)),
+                       'carbs_cons': np.zeros(len(consumption))})
+
+
+for i in range(consumption.shape[0]):
+    macros.loc[i, 'protein_cons'] = np.dot(np.multiply(nutrient_comps[:, 0], consumption[i]), conversion)
+    macros.loc[i, 'fat_cons'] = np.dot(np.multiply(nutrient_comps[:, 1], consumption[i]), conversion)
+    macros.loc[i, 'carbs_cons'] = np.dot(np.multiply(nutrient_comps[:, 2], consumption[i]), conversion)
+
+# macronutrient conversion complete
+# will come back and generate descriptive stats for monthly macronutrient consumption
