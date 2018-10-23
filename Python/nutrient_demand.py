@@ -3,6 +3,9 @@
 import numpy as np
 import pandas as pd
 import glob
+import plotly
+import plotly.plotly as py
+import plotly.graph_objs as go
 import statsmodels as sm
 from scipy import stats
 
@@ -128,5 +131,60 @@ for i in range(consumption.shape[0]):
     macros.loc[i, 'fat_cons'] = np.dot(np.multiply(nutrient_comps[:, 1], consumption[i]), conversion)
     macros.loc[i, 'carbs_cons'] = np.dot(np.multiply(nutrient_comps[:, 2], consumption[i]), conversion)
 
-# macronutrient conversion complete
-# will come back and generate descriptive stats for monthly macronutrient consumption
+# macronutrient monthly mean stats
+
+macro_idx = {}
+for month_year in m_y['date']:
+    macro_idx[month_year] = pd.DataFrame()
+
+for key in macro_idx:
+    macro_idx[key] = df[df['date'] == key].index.tolist()
+
+d_macros = {}
+for month_year in m_y['date']:
+    d_macros[month_year] = pd.DataFrame()
+
+for key in d_macros:
+    d_macros[key] = macros.loc[macro_idx[key]].mean()
+
+df_macro_statlist = [d_macros[m_y.loc[0, 'date']]]
+i = 1
+while i < len(d_macros):
+    df_macro_statlist.append(d_macros[m_y.loc[i, 'date']])
+    i += 1
+    if i > len(d_macros):
+        break
+
+df_macrostat = pd.DataFrame(pd.concat(df_macro_statlist, axis=1).T).round(3)
+df_macrostat.index = m_y['date']
+
+# macronutrient means plot
+x_dates = df_macrostat.index
+
+trace0 = go.Scatter(
+    x=x_dates,
+    y=df_macrostat['protein_cons'],
+    mode='lines',
+    name='Protein'
+)
+
+trace1 = go.Scatter(
+    x=x_dates,
+    y=df_macrostat['fat_cons'],
+    mode='lines',
+    name='Fat'
+)
+
+trace2 = go.Scatter(
+    x=x_dates,
+    y=df_macrostat['carbs_cons'],
+    mode='lines',
+    name='Carbohydrates'
+)
+
+line_data = [trace0, trace1, trace2]
+layout = dict(title='Mean Macronutrient Consumption (7 day periods)',
+              yaxis=dict(title='Macronutrient Consumption in Grams'))
+
+figure = dict(data=line_data, layout=layout)
+#plotly.offline.plot(figure, filename='Macronutrient_means-plot')
