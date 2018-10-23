@@ -1,7 +1,3 @@
-
-[![Eclipse Marketplace](https://img.shields.io/eclipse-marketplace/last-update/:name.svg)
-](https://github.com/AJKappes/Nutrient_Demand/commits/master)
-
 [[![contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](https://github.com/AJKappes/Nutrient_Demand/issues)
 
 
