@@ -159,6 +159,7 @@ df_macrostat = pd.DataFrame(pd.concat(df_macro_statlist, axis=1).T).round(3)
 df_macrostat.index = m_y['date']
 
 # macronutrient means plot
+
 x_dates = df_macrostat.index
 
 trace0 = go.Scatter(
@@ -191,6 +192,7 @@ figure = dict(data=line_data, layout=layout)
 
 # shadow price construction
 # each macronutrient's proportion of total food expense
+
 food_exp_list = [var for var in df_consump.columns if 'Cost' in var][:-4] # removing non-food exps
 df['total_fd_exp'] = df_consump[food_exp_list].sum(axis=1) # total cost of food across all foods consumed
 
@@ -233,6 +235,7 @@ X = np.concatenate([np.array(p_df[['lnprotein_p', 'lnfat_p', 'lncarb_p']]),
 y = np.array(macros.loc[p_df.index.tolist(), ['protein_prop', 'fat_prop', 'carb_prop']])
 
 # function specified by deaton and muellbauer (1980)
+
 def fun_fit(p, X, y):
     # alpha params 0-3
     # beta param 4
@@ -259,6 +262,7 @@ p_init = np.repeat(1, 10)
 fit = optim.least_squares(fun_fit, p_init, jac=jacobian, args=(X, y), verbose=1)
 
 # inference
+
 n = X.shape[0]
 k = p_init.size
 sighat2 = (np.matrix(fit.fun) * np.matrix(fit.fun).T)[0, 0] / (n - k)
@@ -271,5 +275,45 @@ param_pvals = 2 * (1 - stats.t.cdf(abs(param_tvals), n - k))
 # own-price effect is only sig variable
 # may be expected when analyzing at macronutrient level
 
-# TODO compare to corrected stone index OLS method
+# corrected stone index for OLS almost ideal demand system, giancarlo moschini (1995)
+price_bidx = df.loc[p_df.index.tolist(), 'date'][df['date'] == 'Feb-13'].index.tolist()
+price_base = np.empty((len(macro_price)))
+
+for i in range(len(macro_price)):
+    price_base[i] = macros.loc[price_bidx, macro_price[i]].mean()
+
+cStone_pidx = ['Sprotein_idx', 'Sfat_idx', 'Scarb_idx']
+for i in range(len(cStone_pidx)):
+    p_df[cStone_pidx[i]] = macros.loc[p_df.index.tolist(), macro_props[i]] * (p_df[p_df.columns[i]] -
+                                                                           np.log(price_base[i]))
+
+X_cStoneidx = np.concatenate([np.ones(len(p_df)).reshape(len(p_df), 1),
+                              np.array(p_df[['lnprotein_p', 'lnfat_p', 'lncarb_p']]),
+                              np.array(df.loc[p_df.index.tolist(), 'total_fd_exp']).reshape(len(p_df), 1),
+                              np.array(p_df[['Sprotein_idx', 'Sfat_idx', 'Scarb_idx']])],
+                             axis=1)
+
+def ols_est(X, y, indicate):
+    y = np.asmatrix(y).T
+    X = np.asmatrix(X)
+
+    if indicate == 'params':
+        return np.linalg.inv(X.T * X) * X.T * y
+
+    elif indicate == 'resids':
+        return y - X * np.linalg.inv(X.T * X) * X.T * y
+
+    else:
+        print('Indicate "parameters" or "residuals"')
+
+ols_params = ols_est(X_cStoneidx, y[:, 0], 'params')
+ols_resids = ols_est(X_cStoneidx, y[:, 0], 'resids')
+ols_sighat2 = ((ols_resids.T * ols_resids) / (X_cStoneidx.shape[0] - X_cStoneidx.shape[1]))[0, 0]
+ols_paramcov = ols_sighat2 * np.linalg.inv(np.asmatrix(X_cStoneidx).T * np.asmatrix(X_cStoneidx))
+ols_paramse = np.sqrt(np.diag(ols_paramcov))
+ols_tvals = np.divide(np.array(ols_params).reshape(1, X_cStoneidx.shape[1]), ols_paramse)
+ols_pvals = 2 * (1 - stats.t.cdf(abs(ols_tvals), X_cStoneidx.shape[0] - X_cStoneidx.shape[1]))
+# all price effects, own and cross, are significant under OLS estimation
+
+# TODO continue with nonlinear estimation using LaFrance (1990) incomplete demand specification
 
