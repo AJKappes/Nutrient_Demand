@@ -6,23 +6,23 @@ import glob
 import plotly
 import plotly.plotly as py
 import plotly.graph_objs as go
-import statsmodels as sm
 from scipy import stats
+import scipy.optimize as optim
 
 
 ### Data management ###
 
 def files(sub_dir):
-    return glob.glob('/home/akappes/' + sub_dir + '*.csv')
+    return glob.glob('/home/ajkappes/' + sub_dir + '*.csv')
 
 nutrient_dfs = np.array(files('/Research/Africa/Nutrient_Demand/'))
 print(nutrient_dfs)
 
-df_livinc = pd.read_csv(nutrient_dfs[0])
-df_consump = pd.read_csv(nutrient_dfs[1])
-df_hh_demographs = pd.read_csv(nutrient_dfs[2])
-df_nutrient_props = pd.read_csv(nutrient_dfs[3])
-df_land_crop = pd.read_csv(nutrient_dfs[4])
+df_consump = pd.read_csv(nutrient_dfs[0])
+df_nutrient_props = pd.read_csv(nutrient_dfs[1])
+df_land_crop = pd.read_csv(nutrient_dfs[2])
+df_hh_demographs = pd.read_csv(nutrient_dfs[3])
+df_livinc = pd.read_csv(nutrient_dfs[4])
 df_hh_asset = pd.read_csv(nutrient_dfs[5])
 
 # Need to match HH_id by month due to repeating/missing id values across months
@@ -187,4 +187,89 @@ layout = dict(title='Mean Macronutrient Consumption (7 day periods)',
               yaxis=dict(title='Macronutrient Consumption in Grams'))
 
 figure = dict(data=line_data, layout=layout)
-#plotly.offline.plot(figure, filename='Macronutrient_means-plot')
+#plotly.offline.plot(figure, filename='Macronutrient_means_plot.html')
+
+# shadow price construction
+# each macronutrient's proportion of total food expense
+food_exp_list = [var for var in df_consump.columns if 'Cost' in var][:-4] # removing non-food exps
+df['total_fd_exp'] = df_consump[food_exp_list].sum(axis=1) # total cost of food across all foods consumed
+
+macro_props = ['protein_prop', 'fat_prop', 'carb_prop']
+for i in range(len(macro_props)):
+    macros[macro_props[i]] = macros[macros.columns[i]] / macros[['protein_cons', 'fat_cons', 'carbs_cons']].sum(axis=1)
+
+macro_cost = ['protein_cost', 'fat_cost', 'carb_cost']
+for i in range(len(macro_cost)):
+    macros[macro_cost[i]] = macros[macro_props[i]] * df['total_fd_exp']
+
+macro_price = ['protein_p', 'fat_p', 'carb_p']
+for i in range(len(macro_price)):
+    macros[macro_price[i]] = df['total_fd_exp'] / macros[macros.columns[i]]
+
+### demand estimation ###
+
+# almost ideal demand system, deaton and muellbauer (1980)
+# the following provides nonlinear estimation by assumed normal MLE
+
+macros_sub = macros.dropna()
+
+p_df = macros_sub[['protein_p', 'fat_p', 'carb_p']]
+p_df = np.log(p_df.loc[~(p_df == 0).all(axis=1)])
+p_df.columns = ['lnprotein_p', 'lnfat_p', 'lncarb_p']
+
+def d_sum(var):
+    return p_df[var] * p_df[['lnprotein_p', 'lnfat_p', 'lncarb_p']].sum(axis=1)
+
+p_df['lnprotein_sum'] = d_sum('lnprotein_p')
+p_df['lnfat_sum'] = d_sum('lnfat_p')
+p_df['lncarb_sum'] = d_sum('lncarb_p')
+p_df = p_df.replace([np.inf, -np.inf], np.nan).dropna()
+
+X = np.concatenate([np.array(p_df[['lnprotein_p', 'lnfat_p', 'lncarb_p']]),
+                    np.array(df.loc[p_df.index.tolist(), 'total_fd_exp']).reshape(len(p_df), 1),
+                    np.array(p_df[['lnprotein_sum', 'lnfat_sum', 'lncarb_sum']])],
+                   axis=1)
+
+y = np.array(macros.loc[p_df.index.tolist(), ['protein_prop', 'fat_prop', 'carb_prop']])
+
+# function specified by deaton and muellbauer (1980)
+def fun_fit(p, X, y):
+    # alpha params 0-3
+    # beta param 4
+    # gamma param 5-9
+    return ((p[1] - p[4] * p[0]) + p[5] * X[:, 0] + p[6] * X[:, 1] + p[7] * X[:, 2] +
+            p[4] * (X[:, 3] - (p[2] * X[:, 1] + p[3] * X[:, 2]) - 0.5 * (p[8] * X[:, 5] + p[9] * X[:, 6]))
+            ) - y[:, 0]
+
+def jacobian(p, X, y):
+    j = np.empty((X.shape[0], p.size))
+    j[:, 0] = -p[4]
+    j[:, 1] = 1
+    j[:, 2] = -p[4] * X[:, 1]
+    j[:, 3] = -p[4] * X[:, 2]
+    j[:, 4] = -p[0] + X[:, 3] - (p[2] * X[:, 1] + p[3] * X[:, 2]) - 0.5 * (p[8] * X[:, 5] + p[9] * X[:, 6])
+    j[:, 5] = X[:, 0]
+    j[:, 6] = X[:, 1]
+    j[:, 7] = X[:, 2]
+    j[:, 8] = p[4] * X[:, 5]
+    j[:, 9] = p[4] * X[:, 6]
+    return j
+
+p_init = np.repeat(1, 10)
+fit = optim.least_squares(fun_fit, p_init, jac=jacobian, args=(X, y), verbose=1)
+
+# inference
+n = X.shape[0]
+k = p_init.size
+sighat2 = (np.matrix(fit.fun) * np.matrix(fit.fun).T)[0, 0] / (n - k)
+J = np.matrix(fit.jac)
+param_cov = sighat2 * np.linalg.inv(J.T * J)
+param_se = np.sqrt(np.diag(param_cov))
+param_tvals = np.divide(fit.x, param_se)
+t_crit = stats.t.ppf(.975, n - k)
+param_pvals = 2 * (1 - stats.t.cdf(abs(param_tvals), n - k))
+# own-price effect is only sig variable
+# may be expected when analyzing at macronutrient level
+
+# TODO compare to corrected stone index OLS method
+
