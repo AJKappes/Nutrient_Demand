@@ -3,4 +3,4 @@
 
 ### Modeling Nutrient Demand in Undernourished Areas
 
-Nutrient demand systems in rural Kenya are estimated for evaluating policy impacts on nutrition throughout severely malnourished environments.
+Nutrient demand systems in rural Kenya are estimated for evaluating policy impacts on nutrition throughout severely malnourished environments. Navigate to [nbviewer](https://nbviewer.jupyter.org/github/ajkappes/Nutrient_Demand/tree/master/Python/) for viewing formatted Jupyter notebooks (LaTeX math, graphs, etc.).
