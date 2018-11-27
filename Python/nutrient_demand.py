@@ -10,7 +10,8 @@ from scipy import stats
 import scipy.optimize as optim
 
 
-### Data management ###
+###################### Data management ##################################
+#########################################################################
 
 def files(sub_dir):
     return glob.glob('/home/ajkappes/' + sub_dir + '*.csv')
@@ -59,7 +60,7 @@ while i < len(d):
     if i > len(d):
         break
 
-df = pd.concat(df_list, axis=0).reset_index().drop(columns='index') # Ending with 15326 observations
+df = pd.concat(df_list, axis=0).reset_index().drop(columns='index')  # Ending with 15326 observations
 
 # Write algorithm to convert food consumption values to macronutrient proportions
 # using USDA Food Composition Databases https://ndb.nal.usda.gov/ndb/
@@ -72,8 +73,8 @@ consump_l = ['TotalCowMilkConsumed', 'TotalGoatMilkConsumed', 'TotalEggsConsumed
 consumption = df[consump_l]
 
 # Converting '300ML' string in oil consumption to L float value and 2kg in pulses to 2
-consumption.loc[consumption[consumption['TotalOilConsumed'] == '300ML'].index, 'TotalOilConsumed'] = 0.3
-consumption.loc[consumption[consumption['TotalPulsesConsumed'] == '2kg'].index, 'TotalPulsesConsumed'] = 2
+consumption.loc[consumption[consumption['TotalOilConsumed'] == '300ML'].index.tolist(), 'TotalOilConsumed'] = 0.3
+consumption.loc[consumption[consumption['TotalPulsesConsumed'] == '2kg'].index.tolist(), 'TotalPulsesConsumed'] = 2
 consumption = consumption.astype('float64')
 
 
@@ -208,14 +209,15 @@ macro_price = ['protein_p', 'fat_p', 'carb_p']
 for i in range(len(macro_price)):
     macros[macro_price[i]] = df['total_fd_exp'] / macros[macros.columns[i]]
 
-### demand estimation ###
+####################### demand estimation ###############################
+#########################################################################
 
 # almost ideal demand system, deaton and muellbauer (1980)
 # the following provides nonlinear estimation by assumed normal MLE
 
-macros_sub = macros.dropna()
+macros = macros.replace([np.inf, -np.inf], np.nan).dropna()
 
-p_df = macros_sub[['protein_p', 'fat_p', 'carb_p']]
+p_df = macros[['protein_p', 'fat_p', 'carb_p']]
 p_df = np.log(p_df.loc[~(p_df == 0).all(axis=1)])
 p_df.columns = ['lnprotein_p', 'lnfat_p', 'lncarb_p']
 
@@ -225,7 +227,6 @@ def d_sum(var):
 p_df['lnprotein_sum'] = d_sum('lnprotein_p')
 p_df['lnfat_sum'] = d_sum('lnfat_p')
 p_df['lncarb_sum'] = d_sum('lncarb_p')
-p_df = p_df.replace([np.inf, -np.inf], np.nan).dropna()
 
 X = np.concatenate([np.array(p_df[['lnprotein_p', 'lnfat_p', 'lncarb_p']]),
                     np.array(df.loc[p_df.index.tolist(), 'total_fd_exp']).reshape(len(p_df), 1),
@@ -236,46 +237,75 @@ y = np.array(macros.loc[p_df.index.tolist(), ['protein_prop', 'fat_prop', 'carb_
 
 # function specified by deaton and muellbauer (1980)
 
-def fun_fit(p, X, y):
+def fun_fit_aids(p, X, y, indicate):
     # alpha params 0-3
     # beta param 4
     # gamma param 5-9
-    return ((p[1] - p[4] * p[0]) + p[5] * X[:, 0] + p[6] * X[:, 1] + p[7] * X[:, 2] +
-            p[4] * (X[:, 3] - (p[2] * X[:, 1] + p[3] * X[:, 2]) - 0.5 * (p[8] * X[:, 5] + p[9] * X[:, 6]))
-            ) - y[:, 0]
+    if indicate == 'protein':
+        return ((p[1] - p[4] * p[0]) + p[5] * X[:, 0] + p[6] * X[:, 1] + p[7] * X[:, 2] +
+                p[4] * (X[:, 3] - (p[2] * X[:, 1] + p[3] * X[:, 2]) - 0.5 * (p[8] * X[:, 5] + p[9] * X[:, 6]))
+                ) - y[:, 0]
 
-def jacobian(p, X, y):
+    elif indicate == 'fat':
+        return ((p[1] - p[4] * p[0]) + p[5] * X[:, 0] + p[6] * X[:, 1] + p[7] * X[:, 2] +
+                p[4] * (X[:, 3] - (p[2] * X[:, 0] + p[3] * X[:, 2]) - 0.5 * (p[8] * X[:, 4] + p[9] * X[:, 6]))
+                ) - y[:, 1]
+
+    else:
+        return ((p[1] - p[4] * p[0]) + p[5] * X[:, 0] + p[6] * X[:, 1] + p[7] * X[:, 2] +
+                p[4] * (X[:, 3] - (p[2] * X[:, 0] + p[3] * X[:, 1]) - 0.5 * (p[8] * X[:, 4] + p[9] * X[:, 5]))
+                ) - y[:, 2]
+
+def jacobian_aids(p, X, y, indicate):
     j = np.empty((X.shape[0], p.size))
+
+    if indicate == 'protein':
+        j[:, 2] = -p[4] * X[:, 1]
+        j[:, 3] = -p[4] * X[:, 2]
+        j[:, 8] = -p[4] * 0.5 * X[:, 5]
+        j[:, 9] = -p[4] * 0.5 * X[:, 6]
+
+    elif indicate == 'fat':
+        j[:, 2] = -p[4] * X[:, 0]
+        j[:, 3] = -p[4] * X[:, 2]
+        j[:, 8] = -p[4] * 0.5 * X[:, 4]
+        j[:, 9] = -p[4] * 0.5 * X[:, 6]
+
+    else:
+        j[:, 2] = -p[4] * X[:, 0]
+        j[:, 3] = -p[4] * X[:, 1]
+        j[:, 8] = -p[4] * 0.5 * X[:, 4]
+        j[:, 9] = -p[4] * 0.5 * X[:, 5]
+
     j[:, 0] = -p[4]
     j[:, 1] = 1
-    j[:, 2] = -p[4] * X[:, 1]
-    j[:, 3] = -p[4] * X[:, 2]
     j[:, 4] = -p[0] + X[:, 3] - (p[2] * X[:, 1] + p[3] * X[:, 2]) - 0.5 * (p[8] * X[:, 5] + p[9] * X[:, 6])
     j[:, 5] = X[:, 0]
     j[:, 6] = X[:, 1]
     j[:, 7] = X[:, 2]
-    j[:, 8] = p[4] * X[:, 5]
-    j[:, 9] = p[4] * X[:, 6]
     return j
 
 p_init = np.repeat(1, 10)
-fit = optim.least_squares(fun_fit, p_init, jac=jacobian, args=(X, y), verbose=1)
+fit_aids_protein = optim.least_squares(fun_fit_aids, p_init, jac=jacobian_aids, args=(X, y, 'protein'), verbose=1)
+fit_aids_fat = optim.least_squares(fun_fit_aids, p_init, jac=jacobian_aids, args=(X, y, 'fat'), verbose=1)
+fit_aids_carb = optim.least_squares(fun_fit_aids, p_init, jac=jacobian_aids, args=(X, y, 'carb'), verbose=1)
 
 # inference
 
 n = X.shape[0]
 k = p_init.size
-sighat2 = (np.matrix(fit.fun) * np.matrix(fit.fun).T)[0, 0] / (n - k)
-J = np.matrix(fit.jac)
+sighat2 = (np.matrix(fit_aids.fun) * np.matrix(fit_aids.fun).T)[0, 0] / (n - k)
+J = np.matrix(fit_aids.jac)
 param_cov = sighat2 * np.linalg.inv(J.T * J)
 param_se = np.sqrt(np.diag(param_cov))
-param_tvals = np.divide(fit.x, param_se)
+param_tvals = np.divide(fit_aids.x, param_se)
 t_crit = stats.t.ppf(.975, n - k)
 param_pvals = 2 * (1 - stats.t.cdf(abs(param_tvals), n - k))
 # own-price effect is only sig variable
 # may be expected when analyzing at macronutrient level
 
 # corrected stone index for OLS almost ideal demand system, giancarlo moschini (1995)
+
 price_bidx = df.loc[p_df.index.tolist(), 'date'][df['date'] == 'Feb-13'].index.tolist()
 price_base = np.empty((len(macro_price)))
 
@@ -306,7 +336,12 @@ def ols_est(X, y, indicate):
     else:
         print('Indicate "parameters" or "residuals"')
 
-ols_params = ols_est(X_cStoneidx, y[:, 0], 'params')
+ols_params_protein = ols_est(X_cStoneidx, y[:, 0], 'params')
+ols_params_fat = ols_est(X_cStoneidx, y[:, 1], 'params')
+ols_params_carb = ols_est(X_cStoneidx, y[:, 2], 'params')
+
+# ols inference
+
 ols_resids = ols_est(X_cStoneidx, y[:, 0], 'resids')
 ols_sighat2 = ((ols_resids.T * ols_resids) / (X_cStoneidx.shape[0] - X_cStoneidx.shape[1]))[0, 0]
 ols_paramcov = ols_sighat2 * np.linalg.inv(np.asmatrix(X_cStoneidx).T * np.asmatrix(X_cStoneidx))
@@ -315,5 +350,77 @@ ols_tvals = np.divide(np.array(ols_params).reshape(1, X_cStoneidx.shape[1]), ols
 ols_pvals = 2 * (1 - stats.t.cdf(abs(ols_tvals), X_cStoneidx.shape[0] - X_cStoneidx.shape[1]))
 # all price effects, own and cross, are significant under OLS estimation
 
-# TODO continue with nonlinear estimation using LaFrance (1990) incomplete demand specification
+# nonlinear estimation using LaFrance (1990) incomplete demand specification
+
+# converted str #VALUE! error in crop income to zero
+df.loc[df.loc[p_df.index.tolist()][df['cropincome'] == '#VALUE!'].index.tolist(), 'cropincome'] = 0
+
+p_df['total_inc'] = df.loc[p_df.index.tolist(),
+                           [var for var in df.columns if 'ncome' in var]].astype('float64').sum(axis=1)
+
+def m_sum(var):
+    return macros[var] * macros[macro_price].sum(axis=1)
+
+macros['protein_psum'] = m_sum('protein_p')
+macros['fat_psum'] = m_sum('fat_p')
+macros['carb_psum'] = m_sum('carb_p')
+
+X_ids = np.concatenate([np.array(macros.loc[p_df.index.tolist(), macro_price]),
+                        np.array(p_df['total_inc']).reshape(len(p_df), 1),
+                        np.array(macros.loc[p_df.index.tolist(), ['protein_psum', 'fat_psum', 'carb_psum']])
+                        ], axis=1)
+
+y_ids = np.array(macros.loc[p_df.index.tolist(), ['protein_cons', 'fat_cons', 'carbs_cons']])
+
+def fun_fit_ids(p, X, y, indicate):
+    # alpha param 0-3
+    # beta params 4-9
+    # gamma 10-12
+
+    if indicate == 'protein':
+        dep = y[:, 0]
+
+    elif indicate == 'fat':
+        dep = y[:, 1]
+
+    else:
+        dep = y[:, 2]
+
+    return (p[0] + p[4] * X[:, 0] + p[5] * X[:, 1] + p[6] * X[:, 2] +
+            p[10] * (X[:, 3] - (p[1] * X[:, 0] + p[2] * X[:, 1] + p[3] * X[:, 2]) -
+                     0.5 * (p[7] * X[:, 4] + p[8] * X[:, 5] + p[9] * X[:, 6])) +
+            p[11] * (X[:, 3] - (p[1] * X[:, 0] + p[2] * X[:, 1] + p[3] * X[:, 2]) -
+                     0.5 * (p[7] * X[:, 4] + p[8] * X[:, 5] + p[9] * X[:, 6])) +
+            p[12] * (X[:, 3] - (p[1] * X[:, 0] + p[2] * X[:, 1] + p[3] * X[:, 2]) -
+                     0.5 * (p[7] * X[:, 4] + p[8] * X[:, 5] + p[9] * X[:, 6]))
+            ) - dep
+
+def jacobian_ids(p, X, y, indicate):
+    j = np.empty((X_ids.shape[0], p.size))
+    j[:, 0] = 1
+    j[:, 1] = -p[10] * X[:, 0] - p[11] * X[:, 0] - p[12] * X[:, 0]
+    j[:, 2] = -p[10] * X[:, 1] - p[11] * X[:, 1] - p[12] * X[:, 1]
+    j[:, 3] = -p[10] * X[:, 2] - p[11] * X[:, 2] - p[12] * X[:, 2]
+    j[:, 4] = X[:, 0]
+    j[:, 5] = X[:, 1]
+    j[:, 6] = X[:, 2]
+    j[:, 7] = -(p[10] + p[11] + p[12]) * 0.5 * X[:, 4]
+    j[:, 8] = -(p[10] + p[11] + p[12]) * 0.5 * X[:, 5]
+    j[:, 9] = -(p[10] + p[11] + p[12]) * 0.5 * X[:, 6]
+    j[:, 10] = (X[:, 3] - (p[1] * X[:, 0] + p[2] * X[:, 1] + p[3] * X[:, 2]) -
+                0.5 * (p[7] * X[:, 4] + p[8] * X[:, 5] + p[9] * X[:, 6]))
+    j[:, 11] = (X[:, 3] - (p[1] * X[:, 0] + p[2] * X[:, 1] + p[3] * X[:, 2]) -
+                0.5 * (p[7] * X[:, 4] + p[8] * X[:, 5] + p[9] * X[:, 6]))
+    j[:, 12] = (X[:, 3] - (p[1] * X[:, 0] + p[2] * X[:, 1] + p[3] * X[:, 2]) -
+                0.5 * (p[7] * X[:, 4] + p[8] * X[:, 5] + p[9] * X[:, 6]))
+    return j
+
+p_init = np.repeat(1, 13)
+fit_ids_protein = optim.least_squares(fun_fit_ids, p_init, jac=jacobian_ids, args=(X_ids, y_ids, 'protein'), verbose=1)
+fit_ids_fat = optim.least_squares(fun_fit_ids, p_init, jac=jacobian_ids, args=(X_ids, y_ids, 'fat'), verbose=1)
+fit_ids_carb = optim.least_squares(fun_fit_ids, p_init, jac=jacobian_ids, args=(X_ids, y_ids, 'carb'), verbose=1)
+
+# TODO ids parameter inference
+
+
 
