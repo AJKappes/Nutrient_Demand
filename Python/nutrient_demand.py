@@ -750,9 +750,10 @@ trace2 = go.Scatter(
     name='Carb elasticities'
 )
 
-data = [trace0, trace1, trace2]
-plotly.offline.plot(data, filename='monthly_elasticities.html')
-plotly.io.write_image(data, '/home/ajkappes/Research/Africa/Nutrient_Demand/LaTeX/monthly_elasticities.pdf')
+mapping = [trace0, trace1, trace2]
+fig = go.Figure(data=mapping)
+plotly.offline.plot(mapping, filename='monthly_elasticities.html')
+plotly.io.write_image(fig, '/home/ajkappes/Research/Africa/Nutrient_Demand/LaTeX/monthly_elasticities.pdf')
 
 
 
