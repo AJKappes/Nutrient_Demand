@@ -175,6 +175,7 @@ dem_df = pd.DataFrame({'elec': df.loc[p_df.index.tolist(), 'Electricity'],
                        'prim_sch': 0,
                        'sec_sch': 0,
                        'total_hh_mem': df.loc[p_df.index.tolist(), 'TotalHHMembers'],
+                       'hh_mem_sq': df.loc[p_df.index.tolist(), 'TotalHHMembers'] ** 2,
                        'crop_acres': df.loc[p_df.index.tolist(), 'CropAcres']})
 
 dem_df.loc[df.loc[p_df.index.tolist()][df['WaterSource'].isin([1, 2, 4])].index.tolist(), 'bore_dam'] = 1
@@ -183,12 +184,19 @@ dem_df.loc[df.loc[p_df.index.tolist()][df['maxedu'] == 1].index.tolist(), 'no_ed
 dem_df.loc[df.loc[p_df.index.tolist()][df['maxedu'] == 2].index.tolist(), 'prim_sch'] = 1
 dem_df.loc[df.loc[p_df.index.tolist()][df['maxedu'] == 3].index.tolist(), 'sec_sch'] = 1
 
+# converted str #VALUE! error in crop income to zero
+df.loc[df.loc[p_df.index.tolist()][df['cropincome'] == '#VALUE!'].index.tolist(), 'cropincome'] = 0
+
+dem_df['total_inc'] = df.loc[p_df.index.tolist(),
+                             [var for var in df.columns if 'ncome' in var]].astype('float64').sum(axis=1)
+
 
 ###### descriptive stats ######
 
 # variable stats
-var_stats_cols = ['protein_prop', 'protein_p', 'fat_prop', 'fat_p',
-                  'carb_prop', 'carb_p', 'total_hh_mem', 'crop_acres']
+var_stats_cols = ['protein_prop', 'fat_prop', 'carb_prop',
+                  'protein_p','fat_p', 'carb_p',
+                  'total_hh_mem', 'crop_acres']
 
 var_stats_df = pd.DataFrame(columns=var_stats_cols, index=['min', 'max', 'mean', 'sd'])
 
@@ -256,8 +264,8 @@ trace_c = go.Scatter(
 )
 
 line_data = [trace_p, trace_f, trace_c]
-layout = dict(title='Mean Macronutrient Consumption (7 day periods)',
-              yaxis=dict(title='Macronutrient Consumption in Grams'))
+layout = dict(yaxis=dict(title='Macronutrient Consumption in Grams'),
+              font=dict(family='Liberation Serif'))
 
 figure = dict(data=line_data, layout=layout)
 plotly.offline.plot(figure, filename='Macronutrient_means_plot.html')
@@ -301,7 +309,7 @@ for i in range(len(cStone_pidx)):
 X_cStoneidx = np.concatenate([np.ones(len(p_df)).reshape(len(p_df), 1),
                               np.array(p_df[['lnprotein_p', 'lnfat_p', 'lncarb_p']]),
                               np.array(p_df[['Sprotein_idx', 'Sfat_idx', 'Scarb_idx']]),
-                              np.array(dem_df[['total_hh_mem', 'crop_acres']])],
+                              np.array(dem_df[['total_hh_mem', 'hh_mem_sq', 'total_inc', 'crop_acres']])],
                              axis=1)
 
 ### Tornqvist index, giancarlo moschini (1995) ###
@@ -318,7 +326,7 @@ for i in range(len(Tornidx)):
 X_Tornidx = np.concatenate([np.ones(len(p_df)).reshape(len(p_df), 1),
                             np.array(p_df[['lnprotein_p', 'lnfat_p', 'lncarb_p']]),
                             np.array(p_df[['Tprotein_idx', 'Tfat_idx', 'Tcarb_idx']]),
-                            np.array(dem_df[['total_hh_mem', 'crop_acres']])],
+                            np.array(dem_df[['total_hh_mem', 'hh_mem_sq', 'total_inc', 'crop_acres']])],
                            axis=1)
 
 ### ols estimation ###
@@ -339,31 +347,31 @@ ols_params_carb_T = np.array(ols_est(X_Tornidx, y_aids[:, 2], 'params')).reshape
 X_aids = np.concatenate([np.array(p_df[['lnprotein_p', 'lnfat_p', 'lncarb_p']]),
                          np.array(df.loc[p_df.index.tolist(), 'total_fd_exp']).reshape(len(p_df), 1),
                          np.array(p_df[['lnprotein_sum', 'lnfat_sum', 'lncarb_sum']]),
-                         np.array(dem_df[['total_hh_mem', 'crop_acres']])],
+                         np.array(dem_df[['total_hh_mem', 'hh_mem_sq', 'crop_acres']])],
                         axis=1)
 
 # function specified by deaton and muellbauer (1980)
 
 def fun_fit_aids(p, X, y, indicate):
     # alpha params 0-3
-    # beta param 4, 10-11
+    # beta param 4, 10-12
     # gamma param 5-9
     if indicate == 'protein':
         return ((p[1] - p[4] * p[0]) + p[5] * X[:, 0] + p[6] * X[:, 1] + p[7] * X[:, 2] +
                 p[4] * (X[:, 3] - (p[2] * X[:, 1] + p[3] * X[:, 2]) - 0.5 * (p[8] * X[:, 5] + p[9] * X[:, 6])) +
-                p[10] * X[:, 7] + p[11] * X[:, 8]
+                p[10] * X[:, 7] + p[11] * X[:, 8] + p[12] * X[:, 9]
                 ) - y[:, 0]
 
     elif indicate == 'fat':
         return ((p[1] - p[4] * p[0]) + p[5] * X[:, 0] + p[6] * X[:, 1] + p[7] * X[:, 2] +
                 p[4] * (X[:, 3] - (p[2] * X[:, 0] + p[3] * X[:, 2]) - 0.5 * (p[8] * X[:, 4] + p[9] * X[:, 6])) +
-                p[10] * X[:, 7] + p[11] * X[:, 8]
+                p[10] * X[:, 7] + p[11] * X[:, 8] + p[12] * X[:, 9]
                 ) - y[:, 1]
 
     else:
         return ((p[1] - p[4] * p[0]) + p[5] * X[:, 0] + p[6] * X[:, 1] + p[7] * X[:, 2] +
                 p[4] * (X[:, 3] - (p[2] * X[:, 0] + p[3] * X[:, 1]) - 0.5 * (p[8] * X[:, 4] + p[9] * X[:, 5])) +
-                p[10] * X[:, 7] + p[11] * X[:, 8]
+                p[10] * X[:, 7] + p[11] * X[:, 8] + p[12] * X[:, 9]
                 ) - y[:, 2]
 
 def jacobian_aids(p, X, y, indicate):
@@ -395,11 +403,13 @@ def jacobian_aids(p, X, y, indicate):
     j[:, 7] = X[:, 2]
     j[:, 10] = X[:, 7]
     j[:, 11] = X[:, 8]
+    j[:, 12] = X[:, 9]
     return j
 
-p_init_protein = np.array([1, 0.3, 1, 1, -0.0000003, -0.1297, 0.0219, 0.0987, 0.0107, 0.02, 0.00007, -0.00028])
-p_init_fat = np.array([1, 0.3, 1, 1, -0.0000017, 0.0232, -0.0985, 0.1313, 0.0271, -0.0672, -0.0000123, 0.000398])
-p_init_carb = np.array([0, 0.3, 0, 0, 0.000002, 0.1065, 0.0766, -0.23, 0.0178, 0.0664, -0.0000607, -0.0001184])
+# TODO add hh dem starting values
+p_init_protein = np.array([1, 0.3, 1, 1, -0.0000003, -0.1297, 0.0219, 0.0987, 0.0107, 0.02, 0.00001, 0.0, -0.00029])
+p_init_fat = np.array([1, 0.3, 1, 1, -0.0000017, 0.0232, -0.0985, 0.1313, 0.0271, -0.0672, -0.00044, 0.00003, 0.00031])
+p_init_carb = np.array([0, 0.3, 0, 0, 0.000002, 0.1065, 0.0766, -0.23, 0.0178, 0.0664, 0.00043, -0.00003, -0.00002])
 
 fit_aids_protein = optim.least_squares(fun_fit_aids, p_init_protein, jac=jacobian_aids, args=(X_aids, y_aids, 'protein'), verbose=1)
 fit_aids_fat = optim.least_squares(fun_fit_aids, p_init_fat, jac=jacobian_aids, args=(X_aids, y_aids, 'fat'), verbose=1)
@@ -453,12 +463,6 @@ fat_z_params = ols_est(X_z_ins, macros.loc[p_df.index.tolist(), 'fat_cons'], 'pa
 carb_z_params = ols_est(X_z_ins, macros.loc[p_df.index.tolist(), 'carbs_cons'], 'params')
 
 # ids construction
-
-# converted str #VALUE! error in crop income to zero
-df.loc[df.loc[p_df.index.tolist()][df['cropincome'] == '#VALUE!'].index.tolist(), 'cropincome'] = 0
-
-dem_df['total_inc'] = df.loc[p_df.index.tolist(),
-                             [var for var in df.columns if 'ncome' in var]].astype('float64').sum(axis=1)
 
 def opc_sum(var):
     return p_df[var] * dem_df[['total_hh_mem', 'crop_acres']].sum(axis=1)
@@ -684,14 +688,17 @@ for i in range(len(ols_S_e.columns)):
 
 def get_table(param_a, param_b, idx_a, idx_b):
     k = len(S_param_call[0])
+    est_idx = ['intercept', 'protein_price', 'fat_price', 'carb_price', 'protein_idx', 'fat_idx',
+               'carb_idx', 'total_hh_mem', 'total_hh_mem_sq', 'total_inc', 'crop_acres']
     return pd.DataFrame({'stone_param': param_a,
                          'torn_param': param_b,
                          'stone_se': ols_param_se[idx_a].reshape(1, k)[0],
-                         'torn_se': ols_param_se[idx_b].reshape(1, k)[0],
+                         #'torn_se': ols_param_se[idx_b].reshape(1, k)[0],
                          'stone_t': ols_param_t[idx_a].reshape(1, k)[0],
-                         'torn_t': ols_param_t[idx_b].reshape(1, k)[0],
-                         'stone_p': ols_param_pval[idx_a].reshape(1, k)[0],
-                         'torn_p': ols_param_pval[idx_b].reshape(1, k)[0]})
+                         #'torn_t': ols_param_t[idx_b].reshape(1, k)[0],
+                         'stone_p': ols_param_pval[idx_a].reshape(1, k)[0]},
+                         #'torn_p': ols_param_pval[idx_b].reshape(1, k)[0]},
+                        index=est_idx)
 
 protein_table = get_table(S_param_call[0], T_param_call[0], 'Stone_p', 'Torn_p').round(5)
 fat_table = get_table(S_param_call[1], T_param_call[1], 'Stone_f', 'Torn_f').round(5)
@@ -715,23 +722,58 @@ for i in range(len(nl_param_inf_l)):
 # nl standard error calculation error - parameter variance results are < 0
 # TODO look further into optimal jacobian calculations and figure out variance problem
 
-##### demand elasticity ranges for OLS aids estimates #####
+##### demand marginal price effects and elasticity ranges for OLS aids estimates #####
 
+# marginal price effects
+mean_prices = np.array(var_stats_df.loc['mean', macro_price])
+y_means = np.array(var_stats_df.loc['mean', macro_props])
+
+def p_effects(call, param_loc, mean_loc, y):
+    return (call[param_loc] + call[param_loc + 3] * y)  * 1 / mean_prices[mean_loc]
+
+own_effects = np.empty(len(macro_price))
+protein_c_effects = np.empty(len(macro_price) - 1)
+fat_c_effects = np.empty(len(macro_price) - 1)
+carb_c_effects = np.empty(len(macro_price) - 1)
+
+for i in range(len(own_effects)):
+    own_effects[i] = p_effects(S_param_call[i], i + 1, i, y_means[i])
+
+for i in range(len(own_effects) - 1):
+    protein_c_effects[i] = p_effects(S_param_call[0], i + 2, i + 1, y_means[0])
+    carb_c_effects[i] = p_effects(S_param_call[2], i + 1, i, y_means[2])
+
+    if i == 0:
+        fat_c_effects[i] = p_effects(S_param_call[1], i + 1, i, y_means[1])
+    else:
+        fat_c_effects[i] = p_effects(S_param_call[1], i + 2, i + 1, y_means[1])
+
+marg_effects = np.diag(own_effects)
+marg_effects[0, 1:3] = protein_c_effects
+marg_effects[1, [[0, 2]]] = fat_c_effects
+marg_effects[2, 0:2] = carb_c_effects
+marg_effects = pd.DataFrame(marg_effects, columns=macronutrients, index=macronutrients).round(4)
+
+# elasticity distributions
 def demand_elas(p, loc, y):
-    return (p[loc] * 1 / y)
+    return (p[loc] / y) + p[loc + 3]
 
-ed_min = np.empty(y_aids.shape[1])
-ed_max = np.empty(y_aids.shape[1])
-ed_mean = np.empty(y_aids.shape[1])
-for i in range(y_aids.shape[1]):
+ed_min = np.empty(len(macro_price))
+ed_max = np.empty(len(macro_price))
+ed_mean = np.empty(len(macro_price))
+ed_sd = np.empty(len(macro_price))
+for i in range(len(macro_price)):
     ed_min[i] = demand_elas(S_param_call[i], i + 1, y_aids[:, i]).min()
     ed_max[i] = demand_elas(S_param_call[i], i + 1, y_aids[:, i]).max()
     ed_mean[i] = demand_elas(S_param_call[i], i + 1, y_aids[:, i]).mean()
+    ed_sd[i] = demand_elas(S_param_call[i], i + 1, y_aids[:, i]).std()
 
-aggr_ed_summary = pd.DataFrame(np.stack([ed_min, ed_max, ed_mean]))
-aggr_ed_summary.columns = ['Protein', 'Fat', 'Carb']
-aggr_ed_summary.index = ['min', 'max', 'mean']
 
+aggr_ed_summary = pd.DataFrame(np.stack([ed_min, ed_max, ed_mean, ed_sd]),
+                               columns=['Protein', 'Fat', 'Carbohydrate'],
+                               index=['min', 'max', 'mean', 'std_dev']).round(3)
+
+# graphical analysis of elasticities over time
 d_ed_idx = {}
 for month_year in m_y['date']:
     d_ed_idx[month_year] = df[df['date'] == month_year].index
@@ -748,7 +790,6 @@ ed_p = demand_elas(S_param_call[0], 1, d_ed_p)
 ed_f = demand_elas(S_param_call[1], 2, d_ed_f)
 ed_c = demand_elas(S_param_call[2], 3, d_ed_c)
 
-# demand elasticities plot
 trace_p_ed = go.Scatter(
     x=m_y['date'],
     y=ed_p,
@@ -771,46 +812,9 @@ trace_c_ed = go.Scatter(
 )
 
 mapping_ed = [trace_p_ed, trace_f_ed, trace_c_ed]
-layout_ed = dict(title='Monthly Mean Macronutrient Estimated Price Elasticities',
-                 yaxis=dict(title='Estimated Price Elasticity of Budget Share'))
+layout_ed = dict(yaxis=dict(title='Estimated Price Elasticity of Demand'),
+                 font=dict(family='Liberation Serif'))
 
 fig_ed = dict(data=mapping_ed, layout=layout_ed)
 plotly.offline.plot(mapping_ed, filename='monthly_elasticities.html')
 plotly.io.write_image(fig_ed, '/home/ajkappes/Research/Africa/Nutrient_Demand/LaTeX/monthly_elasticities.pdf')
-
-# ols
-
-ols_resids = ols_est(X_cStoneidx, y[:, 0], 'resids')
-ols_sighat2 = ((ols_resids.T * ols_resids) / (X_cStoneidx.shape[0] - X_cStoneidx.shape[1]))[0, 0]
-ols_paramcov = ols_sighat2 * np.linalg.inv(np.asmatrix(X_cStoneidx).T * np.asmatrix(X_cStoneidx))
-ols_paramse = np.sqrt(np.diag(ols_paramcov))
-ols_tvals = np.divide(np.array(ols_params).reshape(1, X_cStoneidx.shape[1]), ols_paramse)
-ols_pvals = 2 * (1 - stats.t.cdf(abs(ols_tvals), X_cStoneidx.shape[0] - X_cStoneidx.shape[1]))
-
-# aids nonlinear
-
-aids_protein_inf = param_inf(fit_aids_protein, X_aids)
-aids_protein_inf.param_se(aids_protein_inf.param_cov())
-aids_protein_inf.param_p(aids_protein_inf.param_t(aids_protein_inf.param_se(aids_protein_inf.param_cov())))
-np.diag(aids_protein_inf.param_cov())
-
-aids_fat_inf = param_inf(fit_aids_fat, X_aids)
-aids_fat_inf.param_se(aids_fat_inf.param_cov())
-aids_fat_inf.param_p(aids_fat_inf.param_t(aids_fat_inf.param_se(aids_fat_inf.param_cov())))
-np.diag(aids_fat_inf.param_cov())
-
-aids_carb_inf = param_inf(fit_aids_carb, X_aids)
-aids_carb_inf.param_se(aids_carb_inf.param_cov())
-aids_carb_inf.param_p(aids_carb_inf.param_t(aids_carb_inf.param_se(aids_carb_inf.param_cov())))
-np.diag(aids_carb_inf.param_cov())
-
-# ids inference
-
-ids_protein_inf = param_inf(fit_ids_protein, X_ids)
-ids_protein_inf.param_se(ids_protein_inf.param_cov())
-ids_protein_inf.param_p(ids_protein_inf.param_t(ids_protein_inf.param_se(ids_protein_inf.param_cov())))
-np.diag(ids_protein_inf.param_cov())
-
-
-
-
