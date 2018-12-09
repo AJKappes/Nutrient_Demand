@@ -685,7 +685,7 @@ for i in range(len(ols_S_e.columns)):
 def get_table(param_a, param_b, idx_a, idx_b):
     k = len(S_param_call[0])
     est_idx = ['intercept', 'protein_price', 'fat_price', 'carb_price', 'protein_idx', 'fat_idx',
-               'carb_idx', 'total_hh_mem', 'total_hh_mem_sq', 'total_inc', 'crop_acres']
+               'carb_idx', 'total_hh_mem', 'total_hh_mem_sq', 'crop_acres']
     return pd.DataFrame({'stone_param': param_a,
                          'torn_param': param_b,
                          'stone_se': ols_param_se[idx_a].reshape(1, k)[0],
@@ -721,11 +721,11 @@ for i in range(len(nl_param_inf_l)):
 ##### demand marginal price effects and elasticity ranges for OLS aids estimates #####
 
 # marginal price effects
-mean_prices = np.array(var_stats_df.loc['mean', macro_price])
-y_means = np.array(var_stats_df.loc['mean', macro_props])
+mean_prices = np.array(macros.loc[p_df.index.tolist(), macro_price].mean())
+y_means = np.array(macros.loc[p_df.index.tolist(), macro_props].mean())
 
 def p_effects(call, param_loc, mean_loc, y):
-    return (call[param_loc] + call[param_loc + 3] * y)  * 1 / mean_prices[mean_loc]
+    return (call[param_loc] + call[param_loc + 3] * y) * 1 / mean_prices[mean_loc]
 
 own_effects = np.empty(len(macro_price))
 protein_c_effects = np.empty(len(macro_price) - 1)
