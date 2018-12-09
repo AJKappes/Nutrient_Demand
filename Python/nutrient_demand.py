@@ -1,4 +1,4 @@
-### Rural Kenya Nutrient Demand Analysis ###
+### Western Kenya Nutrient Demand Analysis ###
 
 import numpy as np
 import pandas as pd
@@ -309,7 +309,7 @@ for i in range(len(cStone_pidx)):
 X_cStoneidx = np.concatenate([np.ones(len(p_df)).reshape(len(p_df), 1),
                               np.array(p_df[['lnprotein_p', 'lnfat_p', 'lncarb_p']]),
                               np.array(p_df[['Sprotein_idx', 'Sfat_idx', 'Scarb_idx']]),
-                              np.array(dem_df[['total_hh_mem', 'hh_mem_sq', 'total_inc', 'crop_acres']])],
+                              np.array(dem_df[['total_hh_mem', 'hh_mem_sq', 'crop_acres']])],
                              axis=1)
 
 ### Tornqvist index, giancarlo moschini (1995) ###
@@ -326,7 +326,7 @@ for i in range(len(Tornidx)):
 X_Tornidx = np.concatenate([np.ones(len(p_df)).reshape(len(p_df), 1),
                             np.array(p_df[['lnprotein_p', 'lnfat_p', 'lncarb_p']]),
                             np.array(p_df[['Tprotein_idx', 'Tfat_idx', 'Tcarb_idx']]),
-                            np.array(dem_df[['total_hh_mem', 'hh_mem_sq', 'total_inc', 'crop_acres']])],
+                            np.array(dem_df[['total_hh_mem', 'hh_mem_sq', 'crop_acres']])],
                            axis=1)
 
 ### ols estimation ###
@@ -550,10 +550,6 @@ def jacobian_ids(p, X, y, indicate):
 p_init_protein = np.array([5012.13, 1, 1, 1, -11183.58, 74.412, 7272.468,
                            1, 1, 1, 0.0057, 0.0079, 0.0032,
                            -51.958, 75.983, 1, 1, 1])
-
-p_init_protein = np.array([5590.28, 1, 1, 1, -14178.12, 518.149, 9418.936,
-                           1, 1, 1, 0.0057, 0.0079, 0.0032,
-                           -69.815, 43.465, -542. 1, 1, 1])
 
 p_init_fat = np.array([903.633, 1430.592, 898.409, -2123.864, 1430.592, 898.409, -2123.864, 1430.592, 898.409, -2123.864,
                        1, 1, 1, 74.674, -61.839, 1430.592, 898.409, -2123.864])
