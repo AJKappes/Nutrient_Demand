@@ -18,6 +18,7 @@ def files(sub_dir):
     return glob.glob('/home/ajkappes/' + sub_dir + '*.csv')
 
 nutrient_dfs = np.array(files('/Research/Africa/Nutrient_Demand/'))
+print(nutrient_dfs)
 
 df_consump = pd.read_csv(nutrient_dfs[0])
 df_nutrient_props = pd.read_csv(nutrient_dfs[1])
@@ -77,37 +78,38 @@ consumption.loc[consumption[consumption['TotalOilConsumed'] == '300ML'].index.to
 consumption.loc[consumption[consumption['TotalPulsesConsumed'] == '2kg'].index.tolist(), 'TotalPulsesConsumed'] = 2
 consumption = consumption.astype('float64')
 
-
 macronutrients = ['protein', 'fat', 'carb']
+micronutrients = ['iron', 'zinc', 'vit_a']
+nutrients = macronutrients + micronutrients
 
 goat_sheep_milk = pd.DataFrame(df_nutrient_props[df_nutrient_props['food_source'].isin(['milk_sheep', 'milk_goat'])]
-                               [macronutrients].mean()).T
+                               [nutrients].mean()).T
 
 pulses = pd.DataFrame(df_nutrient_props[df_nutrient_props['food_source'].isin(['peas', 'navy', 'pinto',
                                                                                'black', 'kidney', 'lentils'])]
-                      [macronutrients].mean()).T
+                      [nutrients].mean()).T
 
 viungo = pd.DataFrame(df_nutrient_props[df_nutrient_props['food_source'].isin(['onions', 'tomatoes', 'carrots',
                                                                                'green_peppers'])]
-                      [macronutrients].mean()).T
+                      [nutrients].mean()).T
 
 greens = pd.DataFrame(df_nutrient_props[df_nutrient_props['food_source'].isin(['spinach', 'cabbage'])]
-                      [macronutrients].mean()).T
+                      [nutrients].mean()).T
 
-nutrient_comps = pd.concat([df_nutrient_props[df_nutrient_props['food_source'] == 'milk_cow'][macronutrients],
+nutrient_comps = pd.concat([df_nutrient_props[df_nutrient_props['food_source'] == 'milk_cow'][nutrients],
                             goat_sheep_milk,
-                            df_nutrient_props[df_nutrient_props['food_source'] == 'eggs'][macronutrients],
-                            df_nutrient_props[df_nutrient_props['food_source'] == 'beef'][macronutrients],
-                            df_nutrient_props[df_nutrient_props['food_source'] == 'goat'][macronutrients],
-                            df_nutrient_props[df_nutrient_props['food_source'] == 'other_poultry'][macronutrients],
-                            df_nutrient_props[df_nutrient_props['food_source'] == 'fish'][macronutrients],
-                            df_nutrient_props[df_nutrient_props['food_source'] == 'maize'][macronutrients],
-                            df_nutrient_props[df_nutrient_props['food_source'] == 'cassava'][macronutrients],
-                            df_nutrient_props[df_nutrient_props['food_source'] == 'sorghum'][macronutrients],
-                            df_nutrient_props[df_nutrient_props['food_source'] == 'banana'][macronutrients],
+                            df_nutrient_props[df_nutrient_props['food_source'] == 'eggs'][nutrients],
+                            df_nutrient_props[df_nutrient_props['food_source'] == 'beef'][nutrients],
+                            df_nutrient_props[df_nutrient_props['food_source'] == 'goat'][nutrients],
+                            df_nutrient_props[df_nutrient_props['food_source'] == 'other_poultry'][nutrients],
+                            df_nutrient_props[df_nutrient_props['food_source'] == 'fish'][nutrients],
+                            df_nutrient_props[df_nutrient_props['food_source'] == 'maize'][nutrients],
+                            df_nutrient_props[df_nutrient_props['food_source'] == 'cassava'][nutrients],
+                            df_nutrient_props[df_nutrient_props['food_source'] == 'sorghum'][nutrients],
+                            df_nutrient_props[df_nutrient_props['food_source'] == 'banana'][nutrients],
                             pulses, viungo, greens,
-                            df_nutrient_props[df_nutrient_props['food_source'] == 'potato'][macronutrients],
-                            df_nutrient_props[df_nutrient_props['food_source'] == 'oil'][macronutrients]],
+                            df_nutrient_props[df_nutrient_props['food_source'] == 'potato'][nutrients],
+                            df_nutrient_props[df_nutrient_props['food_source'] == 'oil'][nutrients]],
                            axis=0).reset_index().drop(columns='index')
 
 # Macronutrient proportions are values per 100g of food item consumed
@@ -117,48 +119,82 @@ nutrient_comps = pd.concat([df_nutrient_props[df_nutrient_props['food_source'] =
 # measured in L: cow and goat/sheep milk
 # measured in Kg: all meat and crop items
 # eggs measured in # consumed: medium egg = 44g => scale 100g egg nutrient values by 0.44
+#
+# Micronutrient: iron and zinc in mg, vitamin A in micrograms
+#                conversions 1:.001 and 1:1e-6
 
 conversion = np.array([10, 10, 0.44, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10])
 consumption = np.array(consumption)
 nutrient_comps = np.array(nutrient_comps)
 
-macros = pd.DataFrame({'protein_cons': np.zeros(len(consumption)),
-                       'fat_cons': np.zeros(len(consumption)),
-                       'carbs_cons': np.zeros(len(consumption))})
-
+nutr_cons = pd.DataFrame({'protein_cons': np.zeros(len(consumption)),
+                          'fat_cons': np.zeros(len(consumption)),
+                          'carb_cons': np.zeros(len(consumption)),
+                          'iron_cons': np.zeros(len(consumption)),
+                          'zinc_cons': np.zeros(len(consumption)),
+                          'vit_a_cons': np.zeros(len(consumption))})
 
 for i in range(consumption.shape[0]):
-    macros.loc[i, 'protein_cons'] = np.dot(np.multiply(nutrient_comps[:, 0], consumption[i]), conversion)
-    macros.loc[i, 'fat_cons'] = np.dot(np.multiply(nutrient_comps[:, 1], consumption[i]), conversion)
-    macros.loc[i, 'carbs_cons'] = np.dot(np.multiply(nutrient_comps[:, 2], consumption[i]), conversion)
+    nutr_cons.loc[i, 'protein_cons'] = np.dot(np.multiply(nutrient_comps[:, 0], consumption[i]), conversion)
+    nutr_cons.loc[i, 'fat_cons'] = np.dot(np.multiply(nutrient_comps[:, 1], consumption[i]), conversion)
+    nutr_cons.loc[i, 'carb_cons'] = np.dot(np.multiply(nutrient_comps[:, 2], consumption[i]), conversion)
+    nutr_cons.loc[i, 'iron_cons'] = np.dot(np.multiply(nutrient_comps[:, 3], consumption[i]), conversion)
+    nutr_cons.loc[i, 'zinc_cons'] = np.dot(np.multiply(nutrient_comps[:, 4], consumption[i]), conversion)
+    nutr_cons.loc[i, 'vit_a_cons'] = np.dot(np.multiply(nutrient_comps[:, 5], consumption[i]), conversion)
+
+# consumption values listed for micronutrients are in milligrams and micrograms (others in grams)
 
 # shadow price construction
-
 food_exp_list = [var for var in df_consump.columns if 'Cost' in var][:-4] # removing non-food exps
 df['total_fd_exp'] = df_consump[food_exp_list].sum(axis=1) # total cost of food across all foods consumed
 
-# each macronutrient's proportion of total food expense
+# each nutrient's proportion of total food expense
 macro_props = ['protein_prop', 'fat_prop', 'carb_prop']
 for i in range(len(macro_props)):
-    macros[macro_props[i]] = macros[macros.columns[i]] / macros[['protein_cons', 'fat_cons', 'carbs_cons']].sum(axis=1)
+    nutr_cons[macro_props[i]] = nutr_cons[nutr_cons.columns[i]] / nutr_cons[['protein_cons', 'fat_cons',
+                                                                             'carb_cons']].sum(axis=1)
+
+# think about micro proportions - iron and zinc units differ from vit_a units
+micro_props = ['iron_prop', 'zinc_prop', 'vit_a_prop']
+    for i in range(len(micro_props)):
+        nutr_cons[micro_props[i]] = nutr_cons[nutr_cons.columns[i + 3]] / nutr_cons[['iron_cons', 'zinc_cons',
+                                                                                     'vit_a_cons']].sum(axis=1)
 
 # macronutrient consumption total cost
 macro_cost = ['protein_cost', 'fat_cost', 'carb_cost']
 for i in range(len(macro_cost)):
     macros[macro_cost[i]] = macros[macro_props[i]] * df['total_fd_exp']
 
-# macronutrient shadow price
-macro_price = ['protein_p', 'fat_p', 'carb_p']
-for i in range(len(macro_price)):
-    macros[macro_price[i]] = df['total_fd_exp'] / macros[macros.columns[i]]
+# nutrient shadow price
+nutrient_price = []
+for i in nutrients:
+    nutrient_price.append(i + '_p')
 
-macros = macros.replace([np.inf, -np.inf], np.nan).dropna()
+for i in range(len(nutrient_price)):
+    nutr_cons[nutrient_price[i]] = df['total_fd_exp'] / nutr_cons[nutr_cons.columns[i]]
+
+nutr_cons = nutr_cons.replace([np.inf, -np.inf], np.nan).dropna()
+macro_price = nutrient_price[0:3]
+micro_price = nutrient_price[3:]
+
+macros_l = []
+for i in macronutrients:
+    macros_l.append(i + '_cons')
+    macros_l.append(i + '_p')
+    macros_l.append(i + '_prop')
+    macros = nutr_cons[macros_l]
+
+micros_l = []
+for i in micronutrients:
+    micros_l.append(i + '_cons')
+    micros_l.append(i + '_p')
+    micros = nutr_cons[micros_l]
 
 # shadow prices df
-p_df = macros[['protein_p', 'fat_p', 'carb_p']]
+p_df = nutr_cons[nutrient_price]
 p_df = np.log(p_df.loc[~(p_df == 0).all(axis=1)])
-macro_lnp = ['lnprotein_p', 'lnfat_p', 'lncarb_p']
-p_df.columns = macro_lnp
+p_df.columns = ['lnprotein_p', 'lnfat_p', 'lncarb_p', 'lniron_p', 'lnzinc_p', 'lnvit_a_p']
+macro_lnp = p_df.columns[0:3].tolist()
 
 def d_sum(var, df_col):
     return p_df[var] * p_df[df_col].sum(axis=1)
@@ -195,7 +231,7 @@ dem_df['total_inc'] = df.loc[p_df.index.tolist(),
 
 # variable stats
 var_stats_cols = ['protein_prop', 'fat_prop', 'carb_prop',
-                  'protein_p','fat_p', 'carb_p',
+                  'protein_p', 'fat_p', 'carb_p',
                   'total_hh_mem', 'crop_acres']
 
 var_stats_df = pd.DataFrame(columns=var_stats_cols, index=['min', 'max', 'mean', 'sd'])
@@ -213,30 +249,36 @@ for var in var_stats_cols:
                                       dem_df[var].std()]).round(5)
 
 # macronutrient monthly mean stats
-macro_idx = {}
+nutr_idx = {}
 for month_year in m_y['date']:
-    macro_idx[month_year] = pd.DataFrame()
+    nutr_idx[month_year] = pd.DataFrame()
 
-for key in macro_idx:
-    macro_idx[key] = df[df['date'] == key].index.tolist()
+for key in nutr_idx:
+    nutr_idx[key] = df[df['date'] == key].index.tolist()
 
 d_macros = {}
+d_micros = {}
 for month_year in m_y['date']:
     d_macros[month_year] = pd.DataFrame()
+    d_micros[month_year] = pd.DataFrame()
 
 for key in d_macros:
-    d_macros[key] = macros.loc[macro_idx[key]].mean()
+    d_macros[key] = macros.loc[nutr_idx[key]].mean()
+    d_micros[key] = micros.loc[nutr_idx[key]].mean()
 
 df_macro_statlist = [d_macros[m_y.loc[0, 'date']]]
+df_micro_statlist = [d_micros[m_y.loc[0, 'date']]]
 i = 1
 while i < len(d_macros):
     df_macro_statlist.append(d_macros[m_y.loc[i, 'date']])
+    df_micro_statlist.append(d_micros[m_y.loc[i, 'date']])
     i += 1
     if i > len(d_macros):
         break
 
 df_macrostat = pd.DataFrame(pd.concat(df_macro_statlist, axis=1).T).round(3)
-df_macrostat.index = m_y['date']
+df_microstat = pd.DataFrame(pd.concat(df_micro_statlist, axis=1).T).round(3)
+df_macrostat.index, df_microstat.index = m_y['date'], m_y['date']
 
 
 # macronutrient means plot
@@ -271,6 +313,43 @@ figure = dict(data=line_data, layout=layout)
 plotly.offline.plot(figure, filename='Macronutrient_means_plot.html')
 plotly.io.write_image(figure, '/home/ajkappes/Research/Africa/Nutrient_Demand/LaTeX/mean_macro_cons.pdf')
 
+# nutrient mean shadow prices plot
+traces_macro = []
+traces_micro = []
+names_macro = ['Protein', 'Fat', 'Carbohydrates']
+names_micro = ['Iron', 'Zinc']
+for i in range(len(macro_price)):
+    traces_macro.append(go.Scatter(
+        x=x_dates,
+        y=df_macrostat[macro_price[i]],
+        mode='lines',
+        name=names_macro[i]
+    ))
+for i in range(len(micro_price) - 1):
+    traces_micro.append(go.Scatter(
+        x=x_dates,
+        y=df_microstat[micro_price[i]],
+        mode='lines',
+        name=names_micro[i]
+    ))
+
+def make_figure(nutrient, units):
+    if nutrient == 'Macronutrient':
+        layout = dict(yaxis=dict(title=nutrient + 'Shadow Price (' + units + ')'),
+                      font=dict(family='Liberation Serif'))
+        return dict(data=traces_macro, layout=layout)
+    else:
+        layout = dict(yaxis=dict(title=nutrient + 'Shadow Price (' + units + ')'),
+                       font=dict(family='Liberation Serif'))
+        return dict(data=traces_micro, layout=layout)
+
+plotly.offline.plot(make_figure('Macronutrient', 'Ksh/g'), filename='Macronutrient_shadowprice_means_plot.html')
+plotly.offline.plot(make_figure('Micronutrient', 'Ksh/mg'), filename='Micronutrient_shadowprice_means_plot.html')
+
+plotly.io.write_image(make_figure('Macronutrient', 'Ksh/g'),
+                      '/home/ajkappes/Research/Africa/Nutrient_Demand/LaTeX/mean_macro_shadowprice.pdf')
+plotly.io.write_image(make_figure('Micronutrient', 'Ksh/mg'),
+                      '/home/ajkappes/Research/Africa/Nutrient_Demand/LaTeX/mean_micro_shadowprice.pdf')
 
 ####################### demand estimation ###############################
 #########################################################################
