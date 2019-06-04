@@ -17,22 +17,26 @@ import scipy.optimize as optim
 def files(sub_dir):
     return glob.glob('/home/ajkappes/' + sub_dir + '*.csv')
 
-nutrient_dfs = np.array(files('/Research/Africa/Nutrient_Demand/'))
-print(nutrient_dfs)
+nutrient_dfs = np.array(files('/research/africa/Nutrient_Demand/'))
+health_dfs = np.array(files('/research/africa/Livestock_Human_Health/data/'))
+print(nutrient_dfs, '\n', health_dfs)
 
 df_consump = pd.read_csv(nutrient_dfs[0])
-df_nutrient_props = pd.read_csv(nutrient_dfs[1])
-df_land_crop = pd.read_csv(nutrient_dfs[2])
-df_hh_demographs = pd.read_csv(nutrient_dfs[3])
-df_livinc = pd.read_csv(nutrient_dfs[4])
-df_hh_asset = pd.read_csv(nutrient_dfs[5])
+df_nutrient_props = pd.read_csv(nutrient_dfs[4])
+df_land_crop = pd.read_csv(nutrient_dfs[6])
+df_hh_demographs = pd.read_csv(nutrient_dfs[5])
+df_livinc = pd.read_csv(nutrient_dfs[3])
+df_hh_asset = pd.read_csv(nutrient_dfs[2])
+#df_healthcare = pd.read_csv(health_dfs[0])
+#df_livestock_gen_health = pd.read_csv(health_dfs[1])
+#df_livestock_health = pd.read_csv(health_dfs[2])
 
 # Need to match HH_id by month due to repeating/missing id values across months
 # then concatenate all months Feb 13 - Jul 16
 
 m_y = pd.DataFrame(df_consump['date'].unique().tolist()).rename(columns={0: 'date'})
 
-d={}
+d = {}
 for month_year in m_y['date']:
     d[month_year] = pd.DataFrame()
 
@@ -51,6 +55,15 @@ for key in d:
 
         df_livinc[df_livinc['date'] == key].drop_duplicates(['HousehldID'], keep='last'),
         how='inner', on='HousehldID').dropna()
+
+        # df_healthcare[df_healthcare['date'] == key].drop_duplicates(['HousehldID'], keep='last'),
+        # how='inner', on='HousehldID').merge()
+        #
+        # df_livestock_gen_health[df_livestock_gen_health['date'] == key].drop_duplicates(['HousehldID'], keep='last'),
+        # how='inner', on='HousehldID').merge(
+        #
+        # df_livestock_health[df_livestock_health['date'] == key].drop_duplicates(['HousehldID'], keep='last'),
+        # how='inner', on='HousehldID').dropna()
 
 
 df_list = [d[m_y.loc[0, 'date']]]
@@ -145,8 +158,8 @@ for i in range(consumption.shape[0]):
 # consumption values listed for micronutrients are in milligrams and micrograms (others in grams)
 
 # shadow price construction
-food_exp_list = [var for var in df_consump.columns if 'Cost' in var][:-4] # removing non-food exps
-df['total_fd_exp'] = df_consump[food_exp_list].sum(axis=1) # total cost of food across all foods consumed
+food_exp_list = [var for var in df.columns if 'Cost' in var][:-5] # removing non-food exps
+df['total_fd_exp'] = df[food_exp_list].sum(axis=1) # total cost of food across all foods consumed
 
 # each nutrient's proportion of total food expense
 macro_props = ['protein_prop', 'fat_prop', 'carb_prop']
@@ -156,14 +169,9 @@ for i in range(len(macro_props)):
 
 # think about micro proportions - iron and zinc units differ from vit_a units
 micro_props = ['iron_prop', 'zinc_prop', 'vit_a_prop']
-    for i in range(len(micro_props)):
-        nutr_cons[micro_props[i]] = nutr_cons[nutr_cons.columns[i + 3]] / nutr_cons[['iron_cons', 'zinc_cons',
-                                                                                     'vit_a_cons']].sum(axis=1)
-
-# macronutrient consumption total cost
-macro_cost = ['protein_cost', 'fat_cost', 'carb_cost']
-for i in range(len(macro_cost)):
-    macros[macro_cost[i]] = macros[macro_props[i]] * df['total_fd_exp']
+for i in range(len(micro_props)):
+    nutr_cons[micro_props[i]] = nutr_cons[nutr_cons.columns[i + 3]] / nutr_cons[['iron_cons', 'zinc_cons',
+                                                                                 'vit_a_cons']].sum(axis=1)
 
 # nutrient shadow price
 nutrient_price = []
@@ -190,12 +198,31 @@ for i in micronutrients:
     micros_l.append(i + '_p')
     micros = nutr_cons[micros_l]
 
-# shadow prices df
-p_df = nutr_cons[nutrient_price]
-p_df = np.log(p_df.loc[~(p_df == 0).all(axis=1)])
-p_df.columns = ['lnprotein_p', 'lnfat_p', 'lncarb_p', 'lniron_p', 'lnzinc_p', 'lnvit_a_p']
-macro_lnp = p_df.columns[0:3].tolist()
+#macronutrient consumption total cost
+macro_cost = ['protein_cost', 'fat_cost', 'carb_cost']
+for i in range(len(macro_cost)):
+    macros[macro_cost[i]] = macros[macro_props[i]] * df['total_fd_exp']
 
+# shadow prices df
+p_df = nutr_cons.loc[~(nutr_cons[nutrient_price] == 0).all(axis=1), nutrient_price]
+
+lnp_list = ['lnprotein_p', 'lnfat_p', 'lncarb_p', 'lniron_p', 'lnzinc_p', 'lnvit_a_p']
+for i in range(len(lnp_list)):
+    p_df[lnp_list[i]] = np.log(p_df[p_df.columns[i]])
+
+p_df = pd.concat([df.loc[p_df.index.tolist(), ['date', 'HousehldID']],
+                  p_df,
+                  nutr_cons.loc[p_df.index.tolist(), macro_props + micro_props],
+                  nutr_cons.loc[p_df.index.tolist(), [j for j in nutr_cons.columns if '_cons' in j]],
+                  df.loc[p_df.index.tolist(), 'total_fd_exp']], axis=1)
+
+macro_budg_share = ['protein_bs', 'fat_bs', 'carb_bs']
+for i in range(len(macro_budg_share)):
+    p_df[macro_budg_share[i]] = p_df[nutrient_price[i]] * p_df[macronutrients[i] + '_cons'] * p_df[macro_props[i]]
+
+#p_df.to_csv('/home/ajkappes/research/africa/Nutrient_Demand/nutrient_shadow_pricing.csv')
+
+macro_lnp = p_df.columns[0:3].tolist()
 def d_sum(var, df_col):
     return p_df[var] * p_df[df_col].sum(axis=1)
 
