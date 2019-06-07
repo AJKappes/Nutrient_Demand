@@ -28,12 +28,11 @@ for i in range(len(nutrient_dfs)):
     if 'pricing' in nutrient_dfs[i]:
         nutr_pricing_df = pd.read_csv(nutrient_dfs[i])
         print('Nutrient pricing data read at position', i)
-        print()
 
     if 'cpi' in nutrient_dfs[i]:
         cpi_df = pd.read_csv(nutrient_dfs[i])
         print('CPI data read at position', i)
-        print()
+print()
 
 month_year = pd.DataFrame(nutr_pricing_df['date'].unique().tolist()).rename(columns={0: 'date'})
 
@@ -189,6 +188,7 @@ for i in X_sheep.columns:
         X_sheep[i].replace(77, 0, inplace=True)
 print()
 
+# fixed effect model for livestock health impacts on nutrient shadow prices
 def fe_mod(y, X):
     '''
     Performs linear regression for livestock health fixed effects on nutrient shadow prices. Dependent variables
@@ -249,8 +249,10 @@ def get_logit_results(y_species, X_species):
         lr = LogisticRegression(solver='lbfgs').fit(np.array(X_species[X_species.columns[0]]).reshape(-1, 1),
                                                     y_species[i])
 
-        prob = 1 - stats.norm.cdf(float(lr.intercept_ + lr.coef_))
-        partial_effect = prob - (1 - stats.norm.cdf(float(lr.intercept_)))
+        # probability nutrient price is above mean given general livestock illness
+        prob = stats.norm.cdf(float(lr.intercept_ + lr.coef_))
+        # partial effect between healthy and sick ivestock on probability of nutrient price being above the mean
+        partial_effect = stats.norm.cdf(float(lr.intercept_)) - prob
         results = [float(lr.intercept_), float(lr.coef_), np.exp(float(lr.coef_)),
                    prob, partial_effect]
 
@@ -263,8 +265,14 @@ bovine_lr = get_logit_results(y_bovine, X_bovine)
 goat_lr = get_logit_results(y_goat, X_goat)
 sheep_lr = get_logit_results(y_sheep, X_sheep)
 
-
-
+print('bovine')
+print(bovine_lr)
+print()
+print('sheep')
+print(goat_lr)
+print()
+print('sheep')
+print(sheep_lr)
 # Partial effect of general livestock illness on nutrient price classification for price = 1 (above mean):
 # Prob(np > mean np | general livestock illness) - Prob(np > mean np | no general livestock illness)
 
