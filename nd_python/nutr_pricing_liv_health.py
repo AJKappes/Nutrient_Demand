@@ -74,7 +74,7 @@ def data_combine(data_dict):
 # aggregate data construction
 df = data_combine(d)
 
-# micro livestock health data construnction
+# micro livestock health data construction
 bovine_health = liv_health_df[liv_health_df['Species'] == 'BO']
 goat_health = liv_health_df[liv_health_df['Species'] == 'OV']
 sheep_health = liv_health_df[liv_health_df['Species'] == 'CP']
@@ -189,7 +189,7 @@ for i in X_sheep.columns:
 print()
 
 # fixed effect model for livestock health impacts on nutrient shadow prices
-def fe_mod(y, X):
+def fe_mod(y, X, cov_spec=False):
     '''
     Performs linear regression for livestock health fixed effects on nutrient shadow prices. Dependent variables
     include protein, fat, and carb shadow prices. Model results are stored in list format accessible by index.
@@ -202,8 +202,12 @@ def fe_mod(y, X):
     model_list = []
 
     for i in cols:
-        mod = sm.OLS(y[i], sm.add_constant(X)).fit()
-        model_list.append(mod)
+        if cov_spec == 'HAC':
+            mod = sm.OLS(y[i], sm.add_constant(X)).fit(cov_type='HAC', cov_kwds={'maxlags': 1})
+            model_list.append(mod)
+        else:
+            mod = sm.OLS(y[i], sm.add_constant(X)).fit()
+            model_list.append(mod)
 
     return model_list
 
@@ -272,7 +276,6 @@ df_lr_results['Species'] = np.array(['Bovine', '', '',
                                      'Sheep', '', ''])
 df_lr_results['Nutrient'] = np.array(['Protein', 'Fat', 'Carbohydrate'] * 3)
 
-
 odds_list = []
 prob_list = []
 pe_list = []
@@ -293,3 +296,196 @@ df_lr_results['Partial_Effect_Healthy'] = np.round(pe_list, 4)
 # reveals a probability the nutrient price is greater when general livestock
 # illness is present than when illness is not present, given nutrient price is 1 (above mean)
 
+# livestock illness instrumental variable approach
+
+df_list = [df_p_bovine, df_p_goat, df_p_sheep]
+
+# IV illness aggregation
+
+for data in df_list:
+    ill_list = [j for j in data.columns if 'Disorders' in j]
+    data['ill_sum'] = data[ill_list].sum(axis=1)
+
+# IV village illness aggregation
+
+vill_list = df_p_bovine['VillageID'].unique().tolist()
+
+bov_my = df_p_bovine.iloc[:, 0].unique().tolist()
+goat_my = df_p_goat.iloc[:, 0].unique().tolist()
+sheep_my = df_p_sheep.iloc[:, 0].unique().tolist()
+species_my = [bov_my, goat_my, sheep_my]
+
+bov_ill_avg = np.zeros(shape=len(df_p_bovine))
+goat_ill_avg = np.zeros(shape=len(df_p_goat))
+sheep_ill_avg = np.zeros(shape=len(df_p_sheep))
+ill_avg = [bov_ill_avg, goat_ill_avg, sheep_ill_avg]
+
+i = 0
+for d, ill in zip(df_list, ill_avg):
+    for date in species_my[i]:
+        idx_date = d[d.iloc[:, 0] == date].index.tolist()
+        vill_list = d.loc[idx_date, 'VillageID'].unique().tolist()
+
+        for vil in vill_list:
+            df = d.loc[idx_date, [c for c in d.columns if 'Disorders' in c or 'Village' in c]]
+            df = df.loc[df['VillageID'] == vil, [c for c in df.columns if 'Disorders' in c]]
+            ill[df.index.tolist()] = sum(df.sum()) / len(df)
+
+    d['ill_avg'] = ill
+    i += 1
+
+# add additional features to livestock disease IV
+
+nd_data_list = list(get_files('Nutrient_Demand/*.csv'))
+for i in range(len(nd_data_list)):
+    if 'asset' in nd_data_list[i]:
+        asset_idx = i
+        print('asset df located at index', i)
+        hh_asset_df = pd.read_csv(nd_data_list[i])
+    elif 'demographs' in nd_data_list[i]:
+        dem_idx = i
+        print('demograph df located at index', i)
+        dem_df = pd.read_csv(nd_data_list[i])
+
+# merge asset and demograph features
+
+d_bov = {}
+d_goat = {}
+d_sheep = {}
+d_list = [d_bov, d_goat, d_sheep]
+for i in range(len(d_list)):
+    d_list[i] = pd.DataFrame()
+
+# for i in range(len(d_list)):
+#     for key in species_my[i]:
+#         print(key)
+#         d_list[i][key] = df_list[i][df_list[i].iloc[:, 0] == key].drop_duplicates(['HousehldID'], keep='last').merge(
+#             hh_asset_df[hh_asset_df['date'] == key].drop_duplicates(['HousehldID'], keep='last'),
+#             how='inner', on='HousehldID').merge(
+#
+#             dem_df[dem_df['date'] == key].drop_duplicates(['HousehldID'], keep='last'), how='inner', on='HousehldID')
+
+for key in species_my[0]:
+    d_bov[key] = df_p_bovine[df_p_bovine.iloc[:, 0] == key].drop_duplicates(['HousehldID'], keep='last').merge(
+        hh_asset_df[hh_asset_df['date'] == key].drop_duplicates(['HousehldID'], keep='last'),
+        how='inner', on='HousehldID').merge(
+
+        dem_df[dem_df['date'] == key].drop_duplicates(['HousehldID'], keep='last'), how='inner', on='HousehldID')
+
+for key in species_my[1]:
+    d_goat[key] = df_p_goat[df_p_goat.iloc[:, 0] == key].drop_duplicates(['HousehldID'], keep='last').merge(
+        hh_asset_df[hh_asset_df['date'] == key].drop_duplicates(['HousehldID'], keep='last'),
+        how='inner', on='HousehldID').merge(
+
+        dem_df[dem_df['date'] == key].drop_duplicates(['HousehldID'], keep='last'), how='inner', on='HousehldID')
+
+for key in species_my[2]:
+    d_sheep[key] = df_p_sheep[df_p_sheep.iloc[:, 0] == key].drop_duplicates(['HousehldID'], keep='last').merge(
+        hh_asset_df[hh_asset_df['date'] == key].drop_duplicates(['HousehldID'], keep='last'),
+        how='inner', on='HousehldID').merge(
+
+        dem_df[dem_df['date'] == key].drop_duplicates(['HousehldID'], keep='last'), how='inner', on='HousehldID')
+
+df_p_bovine = data_combine(d_bov)
+df_p_goat = data_combine(d_goat)
+df_p_sheep = data_combine(d_sheep)
+
+iv_sum_vars = ['ill_sum', 'TotalHHMembers']
+iv_avg_vars = ['ill_avg', 'TotalHHMembers']
+X_sum_bovine = sm.add_constant(df_p_bovine[iv_sum_vars])
+X_avg_bovine = sm.add_constant(df_p_bovine[iv_avg_vars])
+X_sum_goat = sm.add_constant(df_p_goat[iv_sum_vars])
+X_avg_goat = sm.add_constant(df_p_goat[iv_avg_vars])
+X_sum_sheep = sm.add_constant(df_p_sheep[iv_sum_vars])
+X_avg_sheep = sm.add_constant(df_p_sheep[iv_avg_vars])
+
+iv_sum_bov_mod = fe_mod(y_bovine, X_sum_bovine, cov_spec='HAC')
+iv_avg_bov_mod = fe_mod(y_bovine, X_avg_bovine, cov_spec='HAC')
+iv_sum_goat_mod = fe_mod(y_goat, X_sum_goat, cov_spec='HAC')
+iv_avg_goat_mod = fe_mod(y_goat, X_avg_goat, cov_spec='HAC')
+iv_sum_sheep_mod = fe_mod(y_sheep, X_sum_sheep, cov_spec='HAC')
+iv_avg_sheep_mod = fe_mod(y_sheep, X_avg_sheep, cov_spec='HAC')
+iv_sum_mods = [iv_sum_bov_mod, iv_sum_goat_mod, iv_sum_sheep_mod]
+iv_avg_mods = [iv_avg_bov_mod, iv_avg_goat_mod, iv_avg_sheep_mod]
+
+
+dep = ['protein', '', '',
+       'fat', '', '',
+       'carb', '', '']
+
+var_sum_names = ['const', 'Livestock Illness Freq', 'Total HH Members'] * 3
+var_avg_names = ['const', 'Livestock Illness Avg', 'Total HH Members'] * 3
+
+iv_sum_results = []
+iv_avg_results = []
+for m in iv_sum_mods:
+    params = np.concatenate([np.array(m[0].params),
+                             np.array(m[1].params),
+                             np.array(m[2].params)])
+
+    se = np.concatenate([np.array(m[0].bse),
+                         np.array(m[1].bse),
+                         np.array(m[2].bse)])
+
+    tvals = np.concatenate([np.array(m[0].tvalues),
+                            np.array(m[1].tvalues),
+                            np.array(m[2].tvalues)])
+
+    pvals = np.concatenate([np.array(m[0].pvalues),
+                            np.array(m[1].pvalues),
+                            np.array(m[2].pvalues)])
+
+    iv_sum_results.append(round(pd.DataFrame({'Dependent': dep,
+                                          'Independent': var_sum_names,
+                                          'Coef': params,
+                                          'Std Errors': se,
+                                          't-values': tvals,
+                                          'p-values': pvals}), 4))
+
+for m in iv_avg_mods:
+    params = np.concatenate([np.array(m[0].params),
+                             np.array(m[1].params),
+                             np.array(m[2].params)])
+
+    se = np.concatenate([np.array(m[0].bse),
+                         np.array(m[1].bse),
+                         np.array(m[2].bse)])
+
+    tvals = np.concatenate([np.array(m[0].tvalues),
+                            np.array(m[1].tvalues),
+                            np.array(m[2].tvalues)])
+
+    pvals = np.concatenate([np.array(m[0].pvalues),
+                            np.array(m[1].pvalues),
+                            np.array(m[2].pvalues)])
+
+    iv_avg_results.append(round(pd.DataFrame({'Dependent': dep,
+                                          'Independent': var_avg_names,
+                                          'Coef': params,
+                                          'Std Errors': se,
+                                          't-values': tvals,
+                                          'p-values': pvals}), 4))
+
+# variable summary stats
+vars = ['protein_p_defl', 'fat_p_defl', 'carb_p_defl', 'ill_sum', 'TotalHHMembers']
+var_df = pd.concat([df_p_bovine[vars], df_p_goat[vars], df_p_sheep[vars]])
+
+vars_ss = pd.DataFrame(var_df.describe()).rename(columns={'protein_p_defl': 'Protein',
+                                                          'fat_p_defl': 'Lipids',
+                                                          'carb_p_defl': 'Carbohydrates',
+                                                          'ill_sum': 'Livestock Illness Frequency',
+                                                          'TotalHHMembers': 'Total Household Members'})
+
+vars_ss = round(vars_ss[vars_ss.index.isin(['count', 'mean', 'std', 'min', 'max'])], 4)
+
+# tables
+
+print(vars_ss.to_latex())
+print()
+
+for specie, results in zip(species_list, iv_sum_results):
+    print(specie + ':')
+    print(results.to_latex())
+    print()
+
+df_p_bovine.columns
