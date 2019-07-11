@@ -299,6 +299,10 @@ df_lr_results['Partial_Effect_Healthy'] = np.round(pe_list, 4)
 # livestock illness instrumental variable approach
 
 df_list = [df_p_bovine, df_p_goat, df_p_sheep]
+X_list = [X_bovine, X_goat, X_sheep]
+
+for d, x in zip(df_list, X_list):
+    d[[j for j in d.columns if 'Disorders' in j]] = x[[j for j in x.columns if 'Disorders' in j]]
 
 # IV illness aggregation
 
@@ -467,13 +471,13 @@ for m in iv_avg_mods:
                                           'p-values': pvals}), 4))
 
 # variable summary stats
-vars = ['protein_p_defl', 'fat_p_defl', 'carb_p_defl', 'ill_sum', 'TotalHHMembers']
+vars = ['protein_p_defl', 'fat_p_defl', 'carb_p_defl', 'ill_avg', 'TotalHHMembers']
 var_df = pd.concat([df_p_bovine[vars], df_p_goat[vars], df_p_sheep[vars]])
 
 vars_ss = pd.DataFrame(var_df.describe()).rename(columns={'protein_p_defl': 'Protein',
                                                           'fat_p_defl': 'Lipids',
                                                           'carb_p_defl': 'Carbohydrates',
-                                                          'ill_sum': 'Livestock Illness Frequency',
+                                                          'ill_avg': 'Livestock Illness Village Average',
                                                           'TotalHHMembers': 'Total Household Members'})
 
 vars_ss = round(vars_ss[vars_ss.index.isin(['count', 'mean', 'std', 'min', 'max'])], 4)
@@ -483,9 +487,18 @@ vars_ss = round(vars_ss[vars_ss.index.isin(['count', 'mean', 'std', 'min', 'max'
 print(vars_ss.to_latex())
 print()
 
+print('IV: Livestock Illness Frequency')
+print()
 for specie, results in zip(species_list, iv_sum_results):
     print(specie + ':')
     print(results.to_latex())
     print()
 
-df_p_bovine.columns
+print('IV: Livestock Illness Village-Time Period Avg')
+print()
+for specie, results in zip(species_list, iv_avg_results):
+    print(specie + ':')
+    print(results.to_latex())
+    print()
+
+
