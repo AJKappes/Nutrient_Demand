@@ -8,7 +8,7 @@ from sklearn.linear_model import LogisticRegression
 import matplotlib.pyplot as plt
 import scipy.stats
 import glob
-
+plt.style.use('ggplot')
 
 #### data management ####
 #########################
@@ -331,9 +331,9 @@ for d, ill in zip(df_list, ill_avg):
         vill_list = d.loc[idx_date, 'VillageID'].unique().tolist()
 
         for vil in vill_list:
-            df = d.loc[idx_date, [c for c in d.columns if 'Disorders' in c or 'Village' in c]]
-            df = df.loc[df['VillageID'] == vil, [c for c in df.columns if 'Disorders' in c]]
-            ill[df.index.tolist()] = sum(df.sum()) / len(df)
+            dv_df = d.loc[idx_date, [c for c in d.columns if 'Disorders' in c or 'Village' in c]]
+            dv_df = dv_df.loc[dv_df['VillageID'] == vil, [c for c in dv_df.columns if 'Disorders' in c]]
+            ill[dv_df.index.tolist()] = sum(dv_df.sum()) / len(dv_df)
 
     d['ill_avg'] = ill
     i += 1
@@ -470,11 +470,20 @@ for m in iv_avg_mods:
                                           't-values': tvals,
                                           'p-values': pvals}), 4))
 
+
+### tables and plots ###
+
 # variable summary stats
-vars = ['protein_p_defl', 'fat_p_defl', 'carb_p_defl', 'ill_avg', 'TotalHHMembers']
+vars = ['protein_prop', 'fat_prop', 'carb_prop',
+        'protein_p_defl', 'fat_p_defl', 'carb_p_defl',
+        'ill_avg', 'TotalHHMembers']
+
 var_df = pd.concat([df_p_bovine[vars], df_p_goat[vars], df_p_sheep[vars]])
 
-vars_ss = pd.DataFrame(var_df.describe()).rename(columns={'protein_p_defl': 'Protein',
+vars_ss = pd.DataFrame(var_df.describe()).rename(columns={'protein_prop': 'Protein',
+                                                          'fat_prop': 'Lipids',
+                                                          'carb_prop': 'Carbohydrates',
+                                                          'protein_p_defl': 'Protein',
                                                           'fat_p_defl': 'Lipids',
                                                           'carb_p_defl': 'Carbohydrates',
                                                           'ill_avg': 'Livestock Illness Village Average',
@@ -501,4 +510,45 @@ for specie, results in zip(species_list, iv_avg_results):
     print(results.to_latex())
     print()
 
+# deflated shadow price and consumption plots
+
+df = defl_n_prices(df)
+df_date_list = df['date_x'].unique().tolist()
+mean_defl_p = []
+mean_prop_p = []
+mean_defl_f = []
+mean_prop_f = []
+mean_defl_c = []
+mean_prop_c = []
+
+
+for m_y in df_date_list:
+    mean_defl_p.append(df[df.iloc[:, 0] == m_y]['protein_p_defl'].mean())
+    mean_prop_p.append(df[df.iloc[:, 0] == m_y]['protein_prop'].mean())
+    mean_defl_f.append(df[df.iloc[:, 0] == m_y]['fat_p_defl'].mean())
+    mean_prop_f.append(df[df.iloc[:, 0] == m_y]['fat_prop'].mean())
+    mean_defl_c.append(df[df.iloc[:, 0] == m_y]['carb_p_defl'].mean())
+    mean_prop_c.append(df[df.iloc[:, 0] == m_y]['carb_prop'].mean())
+
+mean_defl_list = [mean_defl_p, mean_defl_f, mean_defl_c]
+mean_prop_list = [mean_prop_p, mean_prop_f, mean_prop_c]
+
+plt.rc('font', family='liberation serif')
+colors = ['b', 'g', 'r']
+
+plt.figure(figsize=(8, 5.5))
+for i in range(len(mean_defl_list)):
+    plt.plot(df_date_list, mean_defl_list[i], colors[i], alpha=0.4)
+
+plt.legend(('Protein', 'Lipids', 'Carbohydrates'), loc='upper right')
+plt.ylabel('Real Nutrient Shadow Price (Ksh/g)')
+plt.xticks(rotation=90)
+
+plt.figure(figsize=(8, 5.5))
+for i in range(len(mean_prop_list)):
+    plt.plot(df_date_list, mean_prop_list[i], colors[i], alpha=0.4)
+
+plt.legend(('Protein', 'Lipids', 'Carbohydrates'), loc='upper right')
+plt.ylabel('Nutrient Dietary Proportion (%)')
+plt.xticks(rotation=90)
 
