@@ -14,13 +14,13 @@ plt.style.use('ggplot')
 #########################
 
 def get_files(subpath):
-    return glob.glob('/home/ajkappes/research/africa/' + subpath)
+    return glob.glob('/home/alex/research/africa/' + subpath)
 
 health_dfs = np.array(get_files('Livestock_Human_Health/data/*.csv'))
 nutrient_dfs = np.array(get_files('Nutrient_Demand/*.csv'))
 
-healthcare_df = pd.read_csv(health_dfs[0])
-liv_gen_health_df = pd.read_csv(health_dfs[1])
+liv_gen_health_df = pd.read_csv(health_dfs[0])
+healthcare_df = pd.read_csv(health_dfs[1])
 liv_health_df = pd.read_csv(health_dfs[2])
 
 
@@ -113,9 +113,9 @@ df_p_bovine = data_combine(d_bov_health)
 df_p_goat = data_combine(d_goat_health)
 df_p_sheep = data_combine(d_sheep_health)
 
-# df_p_bovine.to_csv('/home/ajkappes/research/africa/Nutrient_Demand/np_bovine_health.csv')
-# df_p_goat.to_csv('/home/ajkappes/research/africa/Nutrient_Demand/np_goat_health.csv')
-# df_p_sheep.to_csv('/home/ajkappes/research/africa/Nutrient_Demand/np_sheep_health.csv')
+# df_p_bovine.to_csv('/home/alex/research/africa/Nutrient_Demand/np_bovine_health.csv')
+# df_p_goat.to_csv('/home/aalex/research/africa/Nutrient_Demand/np_goat_health.csv')
+# df_p_sheep.to_csv('/home/alex/research/africa/Nutrient_Demand/np_sheep_health.csv')
 
 nutr_p_list = ['protein_p', 'fat_p', 'carb_p']
 
@@ -533,22 +533,62 @@ for m_y in df_date_list:
 mean_defl_list = [mean_defl_p, mean_defl_f, mean_defl_c]
 mean_prop_list = [mean_prop_p, mean_prop_f, mean_prop_c]
 
-plt.rc('font', family='liberation serif')
-colors = ['b', 'g', 'r']
+# plt.rc('font', family='liberation serif')
+# colors = ['b', 'g', 'r']
+#
+# plt.figure(figsize=(8, 5.5))
+# for i in range(len(mean_defl_list)):
+#     plt.plot(df_date_list, mean_defl_list[i], colors[i], alpha=0.4)
+#
+# plt.legend(('Protein', 'Lipids', 'Carbohydrates'), loc='upper right')
+# plt.ylabel('Real Nutrient Shadow Price (Ksh/g)')
+# plt.xticks(rotation=90)
+#
+# plt.figure(figsize=(8, 5.5))
+# for i in range(len(mean_prop_list)):
+#     plt.plot(df_date_list, mean_prop_list[i], colors[i], alpha=0.4)
+#
+# plt.legend(('Protein', 'Lipids', 'Carbohydrates'), loc='upper right')
+# plt.ylabel('Nutrient Dietary Proportion (%)')
+# plt.xticks(rotation=90)
 
-plt.figure(figsize=(8, 5.5))
-for i in range(len(mean_defl_list)):
-    plt.plot(df_date_list, mean_defl_list[i], colors[i], alpha=0.4)
+for d,s in zip(df_list, species_list):
+    print(s, ':')
+    print()
+    print('Illness:', len(d[d['GeneralIllness'] == 1]), 'No illness:', len(d[d['GeneralIllness'] == 0]))
+    print()
 
-plt.legend(('Protein', 'Lipids', 'Carbohydrates'), loc='upper right')
-plt.ylabel('Real Nutrient Shadow Price (Ksh/g)')
-plt.xticks(rotation=90)
+defl_p_list = [j for j in df_p_bovine.columns if '_defl' in j]
 
-plt.figure(figsize=(8, 5.5))
-for i in range(len(mean_prop_list)):
-    plt.plot(df_date_list, mean_prop_list[i], colors[i], alpha=0.4)
+specie_ill_avg = []
+for d in df_list:
+    specie_ill_avg.append(d['ill_avg'].mean())
 
-plt.legend(('Protein', 'Lipids', 'Carbohydrates'), loc='upper right')
-plt.ylabel('Nutrient Dietary Proportion (%)')
-plt.xticks(rotation=90)
+for d, s, I in zip(df_list, species_list, specie_ill_avg):
+    print(s + ':')
+    print('(Illness)')
+    print(round(d[d['ill_avg'] >= I][defl_p_list].mean(), 4))
+    print()
+    print('(No Illness)')
+    print(round(d[d['ill_avg'] < I][defl_p_list].mean(), 4))
+    print()
+
+# avg deflated prices > ill specie avg
+# shadow prices for >= ill specie avg > shadow prices for < ill specie avg
+
+# get all rows where no disorders occur
+disorders = [j for j in df_p_bovine.columns if 'Disorders' in j]
+
+# evaluate shadow price difference for no disorder and disorder occurrence
+for d, s in zip(df_list, species_list):
+    idx = d[disorders].loc[(d[disorders] == 0).all(axis=1)].index.tolist()
+    print(s, 'mean shadow prices' + ':')
+    print()
+    print('(no disorder occurrence)')
+    print(d.loc[idx, defl_p_list].mean())
+    print()
+    print('(disorder occurrence)')
+    print(d.loc[~(d.index.isin(idx)), defl_p_list].mean())
+    print()
+
 
