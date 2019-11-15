@@ -21,7 +21,7 @@ nutrient_dfs = np.array(get_files('Nutrient_Demand/*.csv'))
 
 liv_gen_health_df = pd.read_csv(health_dfs[0])
 healthcare_df = pd.read_csv(health_dfs[1])
-liv_health_df = pd.read_csv(health_dfs[2])
+liv_health_df = pd.read_csv(health_dfs[3])
 
 
 for i in range(len(nutrient_dfs)):
@@ -350,8 +350,12 @@ for i in range(len(nd_data_list)):
         dem_idx = i
         print('demograph df located at index', i)
         dem_df = pd.read_csv(nd_data_list[i])
+    elif 'livestock_inc' in nd_data_list[i]:
+        inc_idx = i
+        print('livestock income df located at index', i)
+        livinc_df = pd.read_csv(nd_data_list[i])
 
-# merge asset and demograph features
+# merge asset, demograph, and livestock income features
 
 d_bov = {}
 d_goat = {}
@@ -374,21 +378,33 @@ for key in species_my[0]:
         hh_asset_df[hh_asset_df['date'] == key].drop_duplicates(['HousehldID'], keep='last'),
         how='inner', on='HousehldID').merge(
 
-        dem_df[dem_df['date'] == key].drop_duplicates(['HousehldID'], keep='last'), how='inner', on='HousehldID')
+        dem_df[dem_df['date'] == key].drop_duplicates(['HousehldID'], keep='last'),
+        how='inner', on='HousehldID').merge(
+
+        livinc_df[livinc_df['date'] == key].drop_duplicates(['HousehldID'], keep='last'),
+        how='inner', on='HousehldID')
 
 for key in species_my[1]:
     d_goat[key] = df_p_goat[df_p_goat.iloc[:, 0] == key].drop_duplicates(['HousehldID'], keep='last').merge(
         hh_asset_df[hh_asset_df['date'] == key].drop_duplicates(['HousehldID'], keep='last'),
         how='inner', on='HousehldID').merge(
 
-        dem_df[dem_df['date'] == key].drop_duplicates(['HousehldID'], keep='last'), how='inner', on='HousehldID')
+        dem_df[dem_df['date'] == key].drop_duplicates(['HousehldID'], keep='last'),
+        how='inner', on='HousehldID').merge(
+
+        livinc_df[livinc_df['date'] == key].drop_duplicates(['HousehldID'], keep='last'),
+        how='inner', on='HousehldID')
 
 for key in species_my[2]:
     d_sheep[key] = df_p_sheep[df_p_sheep.iloc[:, 0] == key].drop_duplicates(['HousehldID'], keep='last').merge(
         hh_asset_df[hh_asset_df['date'] == key].drop_duplicates(['HousehldID'], keep='last'),
         how='inner', on='HousehldID').merge(
 
-        dem_df[dem_df['date'] == key].drop_duplicates(['HousehldID'], keep='last'), how='inner', on='HousehldID')
+        dem_df[dem_df['date'] == key].drop_duplicates(['HousehldID'], keep='last'),
+        how='inner', on='HousehldID').merge(
+
+        livinc_df[livinc_df['date'] == key].drop_duplicates(['HousehldID'], keep='last'),
+        how='inner', on='HousehldID')
 
 df_p_bovine = data_combine(d_bov)
 df_p_goat = data_combine(d_goat)
