@@ -49,9 +49,9 @@ Sfun <- function(theta, gamma, phi, alpha, beta, Y, Xp, Xw) {
     Zi <- c(Xw[i] - xpiter%*%alpha - 1/2*xpiter%*%beta%*%t(xpiter))
     resf <- c(Y[i] - (theta + xpiter%*%phi + gamma*Zi))
     
-    dtheta <- dtheta + -2*resf
-    dgamma <- dgamma + -2*Zi*resf
-    dphi <- dphi + -2*xpiter*resf
+    dtheta <- dtheta - 2*resf
+    dgamma <- dgamma - 2*Zi*resf
+    dphi <- dphi - 2*xpiter*resf
     dalpha <- dalpha + 2*gamma*xpiter*resf
     dbeta <- dbeta + gamma*Xpiter*resf
     
@@ -174,7 +174,7 @@ Hfun <- function(theta, gamma, phi, alpha, beta, Y, Xp, Xw) {
 
   # set symmetric lower off-diagonal
   Hmat[lower.tri(Hmat)] <- t(Hmat)[lower.tri(Hmat)]
-  
+  pseuInvH <- 
   return(Hmat)
   
 }
@@ -198,13 +198,12 @@ param_vals <- list(theta = 1, gamma = 1,
                    alpha = matrix(c(-1, 1, 1), nrow = 3, ncol = 1),
                    beta = diag(rep(-1, 3)))
 
+param_vals <- list(theta = 0, gamma = 0,
+                   phi = matrix(0, nrow = 3, ncol = 1),
+                   alpha = matrix(0, nrow = 3, ncol = 1),
+                   beta = diag(rep(0, 3)))
+
 data_vals <- list(Y = y, Xp = xp, Xw = xw)
 
 S <- do.call(Sfun, c(param_vals, data_vals))
 H <- do.call(Hfun, c(param_vals, data_vals))
-
-solve(H)
-chol(H)
-qr.solve(H)
-s <- svd(H)
-s$v%*%solve(diag(s$d))%*%t(s$u)
