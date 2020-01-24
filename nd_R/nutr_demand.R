@@ -57,8 +57,33 @@ Sfun <- function(theta, gamma, phi, alpha, beta, Y, Xp, Xw) {
     
   }
   
+  # Jacobian setup for Gauss-Newton NLS
+  
+  J <- matrix(0, nrow = length(Y), ncol = 17)
+  R <- matrix(0, nrow = length(Y))
+  for (i in 1:length(Y)) {
+    
+    xpiter <- t(matrix(Xp[i, ]))
+    Xpiter <- matrix(c(xpiter[1]*xpiter,
+                       xpiter[2]*xpiter,
+                       xpiter[3]*xpiter),
+                     nrow = k, ncol = k)
+    
+    Zi <- c(Xw[i] - xpiter%*%alpha - 1/2*xpiter%*%beta%*%t(xpiter))
+    resf <- c(Y[i] - (theta + xpiter%*%phi + gamma*Zi))
+    R[i] <- resf
+    
+    J[i, 1] <- -2*resf
+    J[i, 2] <- -2*Zi*resf
+    J[i, 3:5] <- -2*xpiter*resf
+    J[i, 6:8] <- 2*gamma*xpiter*resf
+    J[i, 9:17] <- gamma*Xpiter*resf
+    
+  }
+  
+  
   Svec <- matrix(c(dtheta, dgamma, dphi, dalpha, dbeta))
-  return(Svec)
+  return(list(Svec, J, R))
   
 }
 
@@ -174,7 +199,9 @@ Hfun <- function(theta, gamma, phi, alpha, beta, Y, Xp, Xw) {
 
   # set symmetric lower off-diagonal
   Hmat[lower.tri(Hmat)] <- t(Hmat)[lower.tri(Hmat)]
-  pseuInvH <- 
+  
+  
+  
   return(Hmat)
   
 }
@@ -188,22 +215,45 @@ xp <- X_list[['dfb']] %>%
   unname()
 xw <- X_list[['dfb']]$income
 
-y <- y[1:10]
-xw <- xw[1:10]
-xp <- xp[1:10, ]
-
-
 param_vals <- list(theta = 1, gamma = 1,
-                   phi = matrix(c(-1, 1, 1), nrow = 3, ncol = 1),
-                   alpha = matrix(c(-1, 1, 1), nrow = 3, ncol = 1),
-                   beta = diag(rep(-1, 3)))
-
-param_vals <- list(theta = 0, gamma = 0,
-                   phi = matrix(0, nrow = 3, ncol = 1),
-                   alpha = matrix(0, nrow = 3, ncol = 1),
+                   phi = matrix(c(-1, 1, 1)),
+                   alpha = matrix(c(rep(0, 3))),
                    beta = diag(rep(0, 3)))
 
 data_vals <- list(Y = y, Xp = xp, Xw = xw)
 
-S <- do.call(Sfun, c(param_vals, data_vals))
-H <- do.call(Hfun, c(param_vals, data_vals))
+err <- 1
+tol <- .001
+itr <- 1
+max_itr <- 100
+param_mat <- matrix(0, nrow = max_itr, ncol = 5)
+while(err > tol & itr <= max_itr) {
+  
+  S <- do.call(Sfun, c(param_vals, data_vals))
+  S <- matrix(S[-c(6:17)])
+  Jr <- S[[2]][, -c(6:17)]
+  Rr <- S[[3]]
+  solve(t(Jr)%*%Jr)%*%t(Jr)%*%Rr
+  
+  params_m <- matrix(unlist(param_vals[1:3]))
+  params_mp1 <- params_m - solve(t(Jr)%*%Jr)%*%t(Jr)%*%Rr
+  param_mat[itr, ] <- c(params_mp1)
+  
+  err <- max(abs(params_mp1 - params_m))
+  
+  param_vals$theta <- params_mp1[1]
+  param_vals$gamma <- params_mp1[2]
+  param_vals$phi <- matrix(params_mp1[3:5])
+  
+  itr <- itr + 1
+  
+  cat('Iteration', itr - 1,
+      '\nMax optimization error', err,
+      '\n')
+  
+}
+
+
+
+
+
